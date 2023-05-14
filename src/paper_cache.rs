@@ -32,6 +32,9 @@ where
 	/// `policies` is zero. If `None` is passed here, the cache
 	/// will consider all eviction policies.
 	///
+	/// The cache's initial eviction policy will be the first one supplied
+	/// in the `policies` slice.
+	///
 	/// # Examples
 	///
 	/// ```
@@ -237,6 +240,18 @@ where
 	/// Sets the eviction policy of the cache to the supplied policy.
 	/// If the supplied policy is not one of the considered eviction policies,
 	/// a [`PaperError`] is returned.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{PaperCache, Policy};
+	///
+	/// let mut cache = PaperCache::<u32, u32>::new(100, Some(&[Policy::Lru]));
+	///
+	/// assert_eq!(cache.policy(&Policy::Lru), Ok(_));
+	///
+	/// // Supplying a policy that is not one of the considered policies will return a PaperError.
+	/// assert_eq!(cache.policy(&Policy::Mru), Err(_));
+	/// ```
 	pub fn policy(&mut self, policy: &'a Policy) -> Result<(), PaperError> {
 		if !self.policies.contains(&policy) {
 			return Err(PaperError::new(
