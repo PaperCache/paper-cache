@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub enum ErrorKind {
 	InvalidPolicies,
+	InvalidPolicy,
 	KeyNotFound,
 	InvalidValueSize,
 	InvalidCacheSize,

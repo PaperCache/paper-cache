@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use crate::error::{PaperError, ErrorKind};
 use crate::object::Object;
 use crate::policy::Policy;
-use crate::policy_stack::{PolicyStack, LruStack};
+use crate::policy_stack::{PolicyStack, LruStack, MruStack};
 
 pub type CacheSize = usize;
 
@@ -16,10 +16,9 @@ where
 
 	policies: &'a [&'a Policy],
 	policy: &'a Policy,
+	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
 	objects: FxHashMap<K, Object<V>>,
-
-	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 }
 
 impl<'a, K, V> PaperCache<'a, K, V>
@@ -68,11 +67,12 @@ where
 
 				policies
 			},
-			None => &[&Policy::Lru],
+			None => &[&Policy::Lru, &Policy::Mru],
 		};
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
 			Box::new(LruStack::<K>::new()),
+			Box::new(MruStack::<K>::new()),
 		];
 
 		let paper_cache = PaperCache {
@@ -81,10 +81,9 @@ where
 
 			policies,
 			policy: policies[0],
+			policy_stacks,
 
 			objects: FxHashMap::default(),
-
-			policy_stacks,
 		};
 
 		Ok(paper_cache)
@@ -235,6 +234,22 @@ where
 		Ok(())
 	}
 
+	/// Sets the eviction policy of the cache to the supplied policy.
+	/// If the supplied policy is not one of the considered eviction policies,
+	/// a [`PaperError`] is returned.
+	pub fn policy(&mut self, policy: &'a Policy) -> Result<(), PaperError> {
+		if !self.policies.contains(&policy) {
+			return Err(PaperError::new(
+				ErrorKind::InvalidPolicy,
+				"The supplied policy is not one of the cache's considered policies."
+			));
+		}
+
+		self.policy = policy;
+		Ok(())
+	}
+
+	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), PaperError> {
 		while self.current_size > *target_size {
 			let policy_index = get_policy_index(self.policy);
@@ -262,5 +277,6 @@ where
 fn get_policy_index(policy: &Policy) -> usize {
 	match policy {
 		Policy::Lru => 0,
+		Policy::Mru => 1,
 	}
 }
