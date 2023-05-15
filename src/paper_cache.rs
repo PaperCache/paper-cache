@@ -102,17 +102,23 @@ where
 	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
-	/// cache.set(0, 1);
+	/// cache.set(0, 1, None);
 	///
 	/// // Getting a key which exists in the cache will return the associated value.
 	/// assert_eq!(cache.get(0), Ok(1));
 	///	// Getting a key which does not exist in the cache will return a PaperError.
 	/// assert_eq!(cache.get(1), Err(_));
-	///
 	/// ```
 	pub fn get(&mut self, key: &K) -> Result<&V, PaperError> {
 		match self.objects.get_mut(key) {
 			Some(object) => {
+				if object.is_expired() {
+					return Err(PaperError::new(
+						ErrorKind::KeyNotFound,
+						"The key was not found in the cache."
+					));
+				}
+
 				for policy in self.policies {
 					let index = get_policy_index(policy);
 					self.policy_stacks[index].update(&key);
@@ -141,10 +147,10 @@ where
 	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
-	/// assert_eq!(cache.set(0, 1), Ok(_));
+	/// assert_eq!(cache.set(0, 1, None), Ok(_));
 	/// ```
-	pub fn set(&mut self, key: K, value: V) -> Result<(), PaperError> {
-		let object = Object::new(value);
+	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), PaperError> {
+		let object = Object::new(value, ttl);
 		let size = object.get_size();
 
 		if size == 0 {
@@ -183,7 +189,7 @@ where
 	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
-	/// cache.set(0, 1);
+	/// cache.set(0, 1, None);
 	/// assert_eq!(cache.del(0), Ok(_));
 	///
 	/// // Deleting a key which does not exist in the cache will return a PaperError.

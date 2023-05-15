@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rustc-hash = "1.1.0"
 dlv-list = "0.5.0"
+kwik = { git = "https://github.com/KiaShakiba/kwik-rs.git", version = "0.1.0" }
