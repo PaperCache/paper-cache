@@ -301,3 +301,8 @@ fn get_policy_index(policy: &Policy) -> usize {
 		Policy::Mru => 1,
 	}
 }
+
+unsafe impl<K, V> Send for PaperCache<K, V>
+where
+	K: Eq + Hash + Copy + 'static + std::fmt::Display,
+{}
