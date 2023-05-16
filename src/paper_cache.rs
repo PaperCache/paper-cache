@@ -7,21 +7,21 @@ use crate::policy_stack::{PolicyStack, LruStack, MruStack};
 
 pub type CacheSize = usize;
 
-pub struct PaperCache<'a, K, V>
+pub struct PaperCache<K, V>
 where
 	K: Eq + Hash + Copy + 'static + std::fmt::Display,
 {
 	max_size: CacheSize,
 	current_size: CacheSize,
 
-	policies: &'a [&'a Policy],
-	policy: &'a Policy,
+	policies: Vec<Policy>,
+	policy: Policy,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
 	objects: FxHashMap<K, Object<V>>,
 }
 
-impl<'a, K, V> PaperCache<'a, K, V>
+impl<K, V> PaperCache<K, V>
 where
 	K: Eq + Hash + Copy + 'static + std::fmt::Display,
 {
@@ -32,8 +32,7 @@ where
 	/// `policies` is zero. If `None` is passed here, the cache
 	/// will consider all eviction policies.
 	///
-	/// The cache's initial eviction policy will be the first one supplied
-	/// in the `policies` slice.
+	/// The cache's initial eviction policy will be LRU.
 	///
 	/// # Examples
 	///
@@ -50,7 +49,7 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		policies: Option<&'a [&'a Policy]>
+		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::new(
@@ -70,7 +69,8 @@ where
 
 				policies
 			},
-			None => &[&Policy::Lru, &Policy::Mru],
+
+			None => vec![Policy::Lru, Policy::Mru],
 		};
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
@@ -83,7 +83,7 @@ where
 			current_size: 0,
 
 			policies,
-			policy: policies[0],
+			policy: Policy::Lru,
 			policy_stacks,
 
 			objects: FxHashMap::default(),
@@ -119,7 +119,7 @@ where
 					));
 				}
 
-				for policy in self.policies {
+				for policy in &self.policies {
 					let index = get_policy_index(policy);
 					self.policy_stacks[index].update(&key);
 				}
@@ -172,7 +172,7 @@ where
 		self.objects.insert(key, object);
 		self.current_size += size;
 
-		for policy in self.policies {
+		for policy in &self.policies {
 			let index = get_policy_index(policy);
 			self.policy_stacks[index].insert(&key);
 		}
@@ -200,7 +200,7 @@ where
 			Some(object) => {
 				self.current_size -= object.get_size();
 
-				for policy in self.policies {
+				for policy in &self.policies {
 					let index = get_policy_index(policy);
 					self.policy_stacks[index].remove(key);
 				}
@@ -258,7 +258,7 @@ where
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
 	/// assert_eq!(cache.policy(&Policy::Mru), Err(_));
 	/// ```
-	pub fn policy(&mut self, policy: &'a Policy) -> Result<(), CacheError> {
+	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
 		if !self.policies.contains(&policy) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidPolicy,
@@ -273,7 +273,7 @@ where
 	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
 		while self.current_size > *target_size {
-			let policy_index = get_policy_index(self.policy);
+			let policy_index = get_policy_index(&self.policy);
 			let policy_key = self.policy_stacks[policy_index].get_eviction();
 
 			if let Some(key) = &policy_key {
