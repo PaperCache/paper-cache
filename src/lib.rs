@@ -9,6 +9,7 @@ pub use command::*;
 pub mod cache_error;
 pub use cache_error::*;
 
-mod object;
-mod policy;
+pub mod policy;
 mod policy_stack;
+
+mod object;
