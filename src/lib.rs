@@ -6,8 +6,8 @@ pub use paper_cache::*;
 pub mod command;
 pub use command::*;
 
-pub mod error;
-pub use error::*;
+pub mod cache_error;
+pub use cache_error::*;
 
 mod object;
 mod policy;

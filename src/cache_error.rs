@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use paper_core::error::PaperError;
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -12,16 +13,16 @@ pub enum ErrorKind {
 }
 
 #[derive(Debug)]
-pub struct PaperError {
+pub struct CacheError {
 	kind: ErrorKind,
 	message: String,
 }
 
-impl PaperError {
-	/// Creates a new [`PaperError`] with the supplied
+impl CacheError {
+	/// Creates a new [`CacheError`] with the supplied
 	/// [`ErrorKind`] and `message`.
 	pub fn new(kind: ErrorKind, message: &str) -> Self {
-		PaperError {
+		CacheError {
 			kind,
 			message: message.to_owned(),
 		}
@@ -33,9 +34,16 @@ impl PaperError {
 	}
 }
 
-impl Error for PaperError {}
+impl PaperError for CacheError {
+	/// Returns the `message`
+	fn message(&self) -> &str {
+		&self.message
+	}
+}
 
-impl Display for PaperError {
+impl Error for CacheError {}
+
+impl Display for CacheError {
 	fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
 		write!(f, "{}", self.message)
 	}
