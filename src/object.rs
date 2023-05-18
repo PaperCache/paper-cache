@@ -1,5 +1,5 @@
-use std::mem;
 use kwik::utils;
+use crate::paper_cache::SizeOfObject;
 
 pub struct Object<T> {
 	data: T,
@@ -25,8 +25,8 @@ impl<T> Object<T> {
 		&self.data
 	}
 
-	pub fn get_size(&self) -> u64 {
-		mem::size_of_val(&self.data) as u64
+	pub fn get_size(&self, size_of_object: &SizeOfObject<T>) -> u64 {
+		size_of_object(&self.data)
 	}
 
 	pub fn get_expiry(&self) -> &u64 {

@@ -9,6 +9,7 @@ use crate::policy::Policy;
 use crate::policy_stack::{PolicyStack, LruStack, MruStack};
 
 pub type CacheSize = u64;
+pub type SizeOfObject<V> = fn(&V) -> u64;
 
 pub struct PaperCache<K, V>
 where
@@ -23,6 +24,7 @@ where
 	expiries: BTreeMap<u64, K>,
 
 	objects: FxHashMap<K, Object<V>>,
+	size_of_object: SizeOfObject<V>,
 }
 
 impl<K, V> PaperCache<K, V>
@@ -53,6 +55,7 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
+		size_of_object: SizeOfObject<V>,
 		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
@@ -92,6 +95,7 @@ where
 			expiries: BTreeMap::new(),
 
 			objects: FxHashMap::default(),
+			size_of_object,
 		};
 
 		Ok(paper_cache)
@@ -182,7 +186,7 @@ where
 		self.prune_expired();
 
 		let object = Object::new(value, ttl);
-		let size = object.get_size();
+		let size = object.get_size(&self.size_of_object);
 		let expiry = *object.get_expiry();
 
 		if size == 0 {
@@ -234,7 +238,7 @@ where
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
 		match self.objects.remove(key) {
 			Some(object) => {
-				self.stats.decrease_used_size(&object.get_size());
+				self.stats.decrease_used_size(&object.get_size(&self.size_of_object));
 
 				for policy in &self.policies {
 					let index = get_policy_index(policy);
@@ -312,8 +316,6 @@ where
 		self.policy = policy;
 		Ok(())
 	}
-
-	/// Returns the cache's
 
 	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
