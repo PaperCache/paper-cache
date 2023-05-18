@@ -1,5 +1,7 @@
 use std::hash::Hash;
+use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
+use kwik::utils;
 use crate::cache_error::{CacheError, ErrorKind};
 use crate::object::Object;
 use crate::policy::Policy;
@@ -17,6 +19,8 @@ where
 	policies: Vec<Policy>,
 	policy: Policy,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
+
+	expiries: BTreeMap<u64, K>,
 
 	objects: FxHashMap<K, Object<V>>,
 }
@@ -86,6 +90,8 @@ where
 			policy: Policy::Lru,
 			policy_stacks,
 
+			expiries: BTreeMap::new(),
+
 			objects: FxHashMap::default(),
 		};
 
@@ -150,8 +156,11 @@ where
 	/// assert_eq!(cache.set(0, 1, None), Ok(_));
 	/// ```
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
+		self.prune_expired();
+
 		let object = Object::new(value, ttl);
 		let size = object.get_size();
+		let expiry = *object.get_expiry();
 
 		if size == 0 {
 			return Err(CacheError::new(
@@ -175,6 +184,10 @@ where
 		for policy in &self.policies {
 			let index = get_policy_index(policy);
 			self.policy_stacks[index].insert(&key);
+		}
+
+		if let Some(_) = ttl {
+			self.expiries.insert(expiry, key);
 		}
 
 		Ok(())
@@ -203,6 +216,13 @@ where
 				for policy in &self.policies {
 					let index = get_policy_index(policy);
 					self.policy_stacks[index].remove(key);
+				}
+
+				if object.is_expired() {
+					return Err(CacheError::new(
+						ErrorKind::KeyNotFound,
+						"The key was not found in the cache."
+					));
 				}
 
 				Ok(())
@@ -292,6 +312,20 @@ where
 		}
 
 		Ok(())
+	}
+
+	/// Removes any expired objects from the cache.
+	fn prune_expired(&mut self) {
+		let now = utils::timestamp();
+
+		while let Some((&expiry, &key)) = self.expiries.iter().next() {
+			if expiry > now {
+				return;
+			}
+
+			let _ = self.del(&key);
+			self.expiries.remove(&expiry);
+		}
 	}
 }
 

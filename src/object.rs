@@ -29,6 +29,10 @@ impl<T> Object<T> {
 		mem::size_of_val(&self.data)
 	}
 
+	pub fn get_expiry(&self) -> &u64 {
+		&self.expiry
+	}
+
 	pub fn is_expired(&self) -> bool {
 		let now = utils::timestamp();
 
