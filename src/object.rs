@@ -25,8 +25,8 @@ impl<T> Object<T> {
 		&self.data
 	}
 
-	pub fn get_size(&self) -> usize {
-		mem::size_of_val(&self.data)
+	pub fn get_size(&self) -> u64 {
+		mem::size_of_val(&self.data) as u64
 	}
 
 	pub fn get_expiry(&self) -> &u64 {

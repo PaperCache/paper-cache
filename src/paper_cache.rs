@@ -3,18 +3,18 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use kwik::utils;
 use crate::cache_error::{CacheError, ErrorKind};
+use crate::stats::Stats;
 use crate::object::Object;
 use crate::policy::Policy;
 use crate::policy_stack::{PolicyStack, LruStack, MruStack};
 
-pub type CacheSize = usize;
+pub type CacheSize = u64;
 
 pub struct PaperCache<K, V>
 where
 	K: Eq + Hash + Copy + 'static + std::fmt::Display,
 {
-	max_size: CacheSize,
-	current_size: CacheSize,
+	stats: Stats,
 
 	policies: Vec<Policy>,
 	policy: Policy,
@@ -83,8 +83,7 @@ where
 		];
 
 		let paper_cache = PaperCache {
-			max_size,
-			current_size: 0,
+			stats: Stats::new(max_size),
 
 			policies,
 			policy: Policy::Lru,
@@ -96,6 +95,22 @@ where
 		};
 
 		Ok(paper_cache)
+	}
+
+	/// Returns the current statistics.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{PaperCache};
+	///
+	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	///
+	/// cache.set(0, 1, None);
+	///
+	/// assert_eq!(cache.stats().get_used_size(), 1);
+	/// ```
+	pub fn stats(&self) -> &Stats {
+		&self.stats
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -119,11 +134,15 @@ where
 		match self.objects.get_mut(key) {
 			Some(object) => {
 				if object.is_expired() {
+					self.stats.miss();
+
 					return Err(CacheError::new(
 						ErrorKind::KeyNotFound,
 						"The key was not found in the cache."
 					));
 				}
+
+				self.stats.hit();
 
 				for policy in &self.policies {
 					let index = get_policy_index(policy);
@@ -133,10 +152,14 @@ where
 				Ok(object.get_data())
 			},
 
-			None => Err(CacheError::new(
-				ErrorKind::KeyNotFound,
-				"The key was not found in the cache."
-			)),
+			None => {
+				self.stats.miss();
+
+				Err(CacheError::new(
+					ErrorKind::KeyNotFound,
+					"The key was not found in the cache."
+				))
+			},
 		}
 	}
 
@@ -169,17 +192,17 @@ where
 			));
 		}
 
-		if size > self.max_size {
+		if !self.stats.max_size_exceeds(&size) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidValueSize,
 				"The value size cannot be larger than the cache size."
 			));
 		}
 
-		self.reduce(&(self.max_size - size))?;
+		self.reduce(&self.stats.target_used_size_to_fit(&size))?;
 
 		self.objects.insert(key, object);
-		self.current_size += size;
+		self.stats.increase_used_size(&size);
 
 		for policy in &self.policies {
 			let index = get_policy_index(policy);
@@ -211,7 +234,7 @@ where
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
 		match self.objects.remove(key) {
 			Some(object) => {
-				self.current_size -= object.get_size();
+				self.stats.decrease_used_size(&object.get_size());
 
 				for policy in &self.policies {
 					let index = get_policy_index(policy);
@@ -258,7 +281,7 @@ where
 		}
 
 		self.reduce(max_size)?;
-		self.max_size = *max_size;
+		self.stats.set_max_size(max_size);
 
 		Ok(())
 	}
@@ -290,9 +313,11 @@ where
 		Ok(())
 	}
 
+	/// Returns the cache's
+
 	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
-		while self.current_size > *target_size {
+		while self.stats.used_size_exceeds(target_size) {
 			let policy_index = get_policy_index(&self.policy);
 			let policy_key = self.policy_stacks[policy_index].get_eviction();
 
