@@ -17,8 +17,8 @@ where
 {
 	stats: Stats,
 
-	policies: Vec<Policy>,
-	policy: Policy,
+	policies: Vec<&'static Policy>,
+	policy: &'static Policy,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
 	expiries: BTreeMap<u64, K>,
@@ -56,7 +56,7 @@ where
 	pub fn new(
 		max_size: CacheSize,
 		size_of_object: SizeOfObject<V>,
-		policies: Option<Vec<Policy>>
+		policies: Option<Vec<&'static Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::new(
@@ -77,8 +77,10 @@ where
 				policies
 			},
 
-			None => vec![Policy::Lru, Policy::Mru],
+			None => vec![&Policy::Lru, &Policy::Mru],
 		};
+
+		let initial_policy = policies[0];
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
 			Box::new(LruStack::<K>::new()),
@@ -89,7 +91,7 @@ where
 			stats: Stats::new(max_size),
 
 			policies,
-			policy: Policy::Lru,
+			policy: initial_policy,
 			policy_stacks,
 
 			expiries: BTreeMap::new(),
@@ -305,7 +307,7 @@ where
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
 	/// assert_eq!(cache.policy(&Policy::Mru), Err(_));
 	/// ```
-	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
+	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
 		if !self.policies.contains(&policy) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidPolicy,
