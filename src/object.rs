@@ -1,5 +1,5 @@
 use kwik::utils;
-use crate::paper_cache::SizeOfObject;
+use crate::cache::SizeOfObject;
 
 pub struct Object<T> {
 	data: T,

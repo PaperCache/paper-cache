@@ -1,5 +1,6 @@
-use crate::paper_cache::CacheSize;
+use crate::cache::CacheSize;
 
+#[derive(Clone, Copy)]
 pub struct Stats {
 	max_size: CacheSize,
 	used_size: CacheSize,

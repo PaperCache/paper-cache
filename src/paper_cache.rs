@@ -1,35 +1,26 @@
+use std::sync::{Arc, Mutex};
+use std::fmt::Display;
 use std::hash::Hash;
-use std::collections::BTreeMap;
-use rustc_hash::FxHashMap;
-use kwik::utils;
-use crate::cache_error::{CacheError, ErrorKind};
+use std::thread;
+use crate::cache_error::CacheError;
 use crate::stats::Stats;
-use crate::object::Object;
 use crate::policy::Policy;
-use crate::policy_stack::{PolicyStack, LruStack, MruStack};
-
-pub type CacheSize = u64;
-pub type SizeOfObject<V> = fn(&V) -> u64;
+use crate::cache::Cache;
+use crate::worker::ttl_worker;
+pub use crate::cache::{CacheSize, SizeOfObject};
 
 pub struct PaperCache<K, V>
 where
-	K: Eq + Hash + Copy + 'static + std::fmt::Display,
+	K: 'static + Eq + Hash + Copy + Display + Sync,
+	V: 'static + Copy + Sync,
 {
-	stats: Stats,
-
-	policies: Vec<&'static Policy>,
-	policy: &'static Policy,
-	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
-
-	expiries: BTreeMap<u64, K>,
-
-	objects: FxHashMap<K, Object<V>>,
-	size_of_object: SizeOfObject<V>,
+	cache: Arc<Mutex<Cache<K, V>>>,
 }
 
 impl<K, V> PaperCache<K, V>
 where
-	K: Eq + Hash + Copy + 'static + std::fmt::Display,
+	K: 'static + Eq + Hash + Copy + Display + Sync,
+	V: 'static + Copy + Sync,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
@@ -43,61 +34,30 @@ where
 	/// # Examples
 	///
 	/// ```
-	/// use paper_cache::{PaperCache, Policy};
-	///
-	/// assert_eq!(PaperCache::<u32, u32>::new(100, Some(&[&Policy::Lru])), Ok(_));
+	/// assert_eq!(Cache::<u32, u32>::new(100, Some(&[&Policy::Lru])), Ok(_));
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert_eq!(PaperCache::<u32, u32>::new(0, Some(&[&Policy::Lru])), Err(_));
+	/// assert_eq!(Cache::<u32, u32>::new(0, Some(&[&Policy::Lru])), Err(_));
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
-	/// assert_eq!(PaperCache::<u32, u32>::new(0, Some(&[])), Err(_));
+	/// assert_eq!(Cache::<u32, u32>::new(0, Some(&[])), Err(_));
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
 		size_of_object: SizeOfObject<V>,
 		policies: Option<Vec<&'static Policy>>
 	) -> Result<Self, CacheError> {
-		if max_size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidCacheSize,
-				"The cache size cannot be zero."
-			));
-		}
+		let cache = Arc::new(Mutex::new(
+			Cache::<K, V>::new(max_size, size_of_object, policies)?
+		));
 
-		let policies = match policies {
-			Some(policies) => {
-				if policies.is_empty() {
-					return Err(CacheError::new(
-						ErrorKind::InvalidPolicies,
-						"Invalid policies."
-					));
-				}
-
-				policies
-			},
-
-			None => vec![&Policy::Lru, &Policy::Mru],
-		};
-
-		let initial_policy = policies[0];
-
-		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
-			Box::new(LruStack::<K>::new()),
-			Box::new(MruStack::<K>::new()),
-		];
+		let ttl_cache = Arc::clone(&cache);
+		thread::spawn(move || {
+			ttl_worker(ttl_cache);
+		});
 
 		let paper_cache = PaperCache {
-			stats: Stats::new(max_size),
-
-			policies,
-			policy: initial_policy,
-			policy_stacks,
-
-			expiries: BTreeMap::new(),
-
-			objects: FxHashMap::default(),
-			size_of_object,
+			cache,
 		};
 
 		Ok(paper_cache)
@@ -107,16 +67,15 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
 	/// cache.set(0, 1, None);
 	///
 	/// assert_eq!(cache.stats().get_used_size(), 1);
 	/// ```
-	pub fn stats(&self) -> &Stats {
-		&self.stats
+	pub fn stats(&self) -> Stats {
+		let cache = self.cache.lock().unwrap();
+		cache.stats()
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -125,8 +84,6 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
 	/// cache.set(0, 1, None);
@@ -136,37 +93,9 @@ where
 	///	// Getting a key which does not exist in the cache will return a CacheError.
 	/// assert_eq!(cache.get(1), Err(_));
 	/// ```
-	pub fn get(&mut self, key: &K) -> Result<&V, CacheError> {
-		match self.objects.get_mut(key) {
-			Some(object) => {
-				if object.is_expired() {
-					self.stats.miss();
-
-					return Err(CacheError::new(
-						ErrorKind::KeyNotFound,
-						"The key was not found in the cache."
-					));
-				}
-
-				self.stats.hit();
-
-				for policy in &self.policies {
-					let index = get_policy_index(policy);
-					self.policy_stacks[index].update(&key);
-				}
-
-				Ok(object.get_data())
-			},
-
-			None => {
-				self.stats.miss();
-
-				Err(CacheError::new(
-					ErrorKind::KeyNotFound,
-					"The key was not found in the cache."
-				))
-			},
-		}
+	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
+		let mut cache = self.cache.lock().unwrap();
+		cache.get(key)
 	}
 
 	/// Sets the supplied key and value in the cache.
@@ -178,48 +107,13 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
 	/// assert_eq!(cache.set(0, 1, None), Ok(_));
 	/// ```
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
-		self.prune_expired();
-
-		let object = Object::new(value, ttl);
-		let size = object.get_size(&self.size_of_object);
-		let expiry = *object.get_expiry();
-
-		if size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidValueSize,
-				"The value size cannot be zero."
-			));
-		}
-
-		if !self.stats.max_size_exceeds(&size) {
-			return Err(CacheError::new(
-				ErrorKind::InvalidValueSize,
-				"The value size cannot be larger than the cache size."
-			));
-		}
-
-		self.reduce(&self.stats.target_used_size_to_fit(&size))?;
-
-		self.objects.insert(key, object);
-		self.stats.increase_used_size(&size);
-
-		for policy in &self.policies {
-			let index = get_policy_index(policy);
-			self.policy_stacks[index].insert(&key);
-		}
-
-		if let Some(_) = ttl {
-			self.expiries.insert(expiry, key);
-		}
-
-		Ok(())
+		let mut cache = self.cache.lock().unwrap();
+		cache.set(key, value, ttl)
 	}
 
 	/// Deletes the object associated with the supplied key in the cache.
@@ -227,8 +121,6 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
 	/// cache.set(0, 1, None);
@@ -238,30 +130,8 @@ where
 	/// assert_eq!(cache.del(1), Err(_));
 	/// ```
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
-		match self.objects.remove(key) {
-			Some(object) => {
-				self.stats.decrease_used_size(&object.get_size(&self.size_of_object));
-
-				for policy in &self.policies {
-					let index = get_policy_index(policy);
-					self.policy_stacks[index].remove(key);
-				}
-
-				if object.is_expired() {
-					return Err(CacheError::new(
-						ErrorKind::KeyNotFound,
-						"The key was not found in the cache."
-					));
-				}
-
-				Ok(())
-			},
-
-			None => Err(CacheError::new(
-				ErrorKind::KeyNotFound,
-				"The key was not found in the cache."
-			)),
-		}
+		let mut cache = self.cache.lock().unwrap();
+		cache.del(key)
 	}
 
 	/// Resizes the cache to the supplied maximum size.
@@ -269,8 +139,6 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
 	///
 	/// assert_eq!(cache.resize(&1), Ok(_));
@@ -279,17 +147,8 @@ where
 	/// assert_eq!(cache.resize(&0), Err(_));
 	/// ```
 	pub fn resize(&mut self, max_size: &CacheSize) -> Result<(), CacheError> {
-		if *max_size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidCacheSize,
-				"The cache size cannot be zero."
-			));
-		}
-
-		self.reduce(max_size)?;
-		self.stats.set_max_size(max_size);
-
-		Ok(())
+		let mut cache = self.cache.lock().unwrap();
+		cache.resize(max_size)
 	}
 
 	/// Sets the eviction policy of the cache to the supplied policy.
@@ -298,8 +157,6 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy};
-	///
 	/// let mut cache = PaperCache::<u32, u32>::new(100, Some(&[Policy::Lru]));
 	///
 	/// assert_eq!(cache.policy(&Policy::Lru), Ok(_));
@@ -308,64 +165,13 @@ where
 	/// assert_eq!(cache.policy(&Policy::Mru), Err(_));
 	/// ```
 	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
-		if !self.policies.contains(&policy) {
-			return Err(CacheError::new(
-				ErrorKind::InvalidPolicy,
-				"The supplied policy is not one of the cache's considered policies."
-			));
-		}
-
-		self.policy = policy;
-		Ok(())
-	}
-
-	/// Reduces the cache size to the maximum size.
-	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
-		while self.stats.used_size_exceeds(target_size) {
-			let policy_index = get_policy_index(&self.policy);
-			let policy_key = self.policy_stacks[policy_index].get_eviction();
-
-			if let Some(key) = &policy_key {
-				if let Err(_) = self.del(key) {
-					return Err(CacheError::new(
-						ErrorKind::Internal,
-						"An internal error has occured."
-					));
-				}
-			} else {
-				return Err(CacheError::new(
-					ErrorKind::Internal,
-					"An internal error has occured."
-				));
-			}
-		}
-
-		Ok(())
-	}
-
-	/// Removes any expired objects from the cache.
-	fn prune_expired(&mut self) {
-		let now = utils::timestamp();
-
-		while let Some((&expiry, &key)) = self.expiries.iter().next() {
-			if expiry > now {
-				return;
-			}
-
-			let _ = self.del(&key);
-			self.expiries.remove(&expiry);
-		}
-	}
-}
-
-fn get_policy_index(policy: &Policy) -> usize {
-	match policy {
-		Policy::Lru => 0,
-		Policy::Mru => 1,
+		let mut cache = self.cache.lock().unwrap();
+		cache.policy(policy)
 	}
 }
 
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
-	K: Eq + Hash + Copy + 'static + std::fmt::Display,
+	K: 'static + Eq + Hash + Copy + Display + Sync,
+	V: 'static + Copy + Sync,
 {}
