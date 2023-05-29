@@ -12,7 +12,7 @@ pub use crate::cache::{CacheSize, SizeOfObject};
 pub struct PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
 }
@@ -20,7 +20,7 @@ where
 impl<K, V> PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
@@ -173,5 +173,5 @@ where
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {}

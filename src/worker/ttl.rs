@@ -9,7 +9,7 @@ use crate::worker::TIME_INCREMENT;
 pub fn worker<K, V>(cache: Arc<Mutex<Cache<K, V>>>)
 where
 	K: Eq + Hash + Copy + 'static + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {
 	loop {
 		thread::sleep(Duration::from_millis(TIME_INCREMENT));

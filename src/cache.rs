@@ -15,7 +15,7 @@ pub type SizeOfObject<V> = fn(&V) -> u64;
 pub struct Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {
 	stats: Stats,
 
@@ -32,7 +32,7 @@ where
 impl<K, V> Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {
 	pub fn new(
 		max_size: CacheSize,
@@ -248,5 +248,5 @@ where
 unsafe impl<K, V> Send for Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Copy + Sync,
+	V: 'static + Clone + Sync,
 {}
