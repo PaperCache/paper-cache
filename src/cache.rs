@@ -106,7 +106,7 @@ where
 					self.policy_stacks[policy.index()].update(&key);
 				}
 
-				Ok(*object.get_data())
+				Ok(object.get_data().clone())
 			},
 
 			None => {
