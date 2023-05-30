@@ -15,3 +15,4 @@ pub mod policy;
 mod policy_stack;
 
 mod object;
+pub use object::MemSize as ObjectMemSize;
