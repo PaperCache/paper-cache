@@ -5,17 +5,16 @@ use rustc_hash::FxHashMap;
 use kwik::utils;
 use crate::cache_error::{CacheError, ErrorKind};
 use crate::stats::Stats;
-use crate::object::Object;
+use crate::object::{Object, MemSize};
 use crate::policy::Policy;
 use crate::policy_stack::{PolicyStack, LruStack, MruStack};
 
 pub type CacheSize = u64;
-pub type SizeOfObject<V> = fn(&V) -> u64;
 
 pub struct Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {
 	stats: Stats,
 
@@ -26,17 +25,15 @@ where
 	expiries: BTreeMap<u64, K>,
 
 	objects: FxHashMap<K, Object<V>>,
-	size_of_object: SizeOfObject<V>,
 }
 
 impl<K, V> Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {
 	pub fn new(
 		max_size: CacheSize,
-		size_of_object: SizeOfObject<V>,
 		policies: Option<Vec<&'static Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
@@ -78,7 +75,6 @@ where
 			expiries: BTreeMap::new(),
 
 			objects: FxHashMap::default(),
-			size_of_object,
 		};
 
 		Ok(cache)
@@ -122,7 +118,7 @@ where
 
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
 		let object = Object::new(value, ttl);
-		let size = object.get_size(&self.size_of_object);
+		let size = object.get_size();
 		let expiry = *object.get_expiry();
 
 		if size == 0 {
@@ -158,7 +154,7 @@ where
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
 		match self.objects.remove(key) {
 			Some(object) => {
-				self.stats.decrease_used_size(&object.get_size(&self.size_of_object));
+				self.stats.decrease_used_size(&object.get_size());
 
 				for policy in &self.policies {
 					self.policy_stacks[policy.index()].remove(key);
@@ -248,5 +244,5 @@ where
 unsafe impl<K, V> Send for Cache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {}

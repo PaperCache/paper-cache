@@ -1,12 +1,15 @@
 use kwik::utils;
-use crate::cache::SizeOfObject;
 
-pub struct Object<T> {
+pub struct Object<T: MemSize> {
 	data: T,
 	expiry: u64,
 }
 
-impl<T> Object<T> {
+pub trait MemSize {
+	fn mem_size(&self) -> usize;
+}
+
+impl<T: MemSize> Object<T> {
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
 		let now = utils::timestamp();
 
@@ -25,8 +28,8 @@ impl<T> Object<T> {
 		&self.data
 	}
 
-	pub fn get_size(&self, size_of_object: &SizeOfObject<T>) -> u64 {
-		size_of_object(&self.data)
+	pub fn get_size(&self) -> u64 {
+		self.data.mem_size() as u64
 	}
 
 	pub fn get_expiry(&self) -> &u64 {

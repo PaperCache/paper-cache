@@ -3,16 +3,17 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::thread;
 use crate::cache_error::CacheError;
+use crate::object::MemSize;
 use crate::stats::Stats;
 use crate::policy::Policy;
 use crate::cache::Cache;
 use crate::worker::ttl_worker;
-pub use crate::cache::{CacheSize, SizeOfObject};
+pub use crate::cache::CacheSize;
 
 pub struct PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
 }
@@ -20,7 +21,7 @@ where
 impl<K, V> PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
@@ -44,11 +45,10 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		size_of_object: SizeOfObject<V>,
 		policies: Option<Vec<&'static Policy>>
 	) -> Result<Self, CacheError> {
 		let cache = Arc::new(Mutex::new(
-			Cache::<K, V>::new(max_size, size_of_object, policies)?
+			Cache::<K, V>::new(max_size, policies)?
 		));
 
 		let ttl_cache = Arc::clone(&cache);
@@ -173,5 +173,5 @@ where
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Copy + Display + Sync,
-	V: 'static + Clone + Sync,
+	V: 'static + Clone + Sync + MemSize,
 {}
