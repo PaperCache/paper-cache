@@ -46,6 +46,11 @@ where
 		}
 	}
 
+	fn clear(&mut self) {
+		self.map.clear();
+		self.stack.clear();
+	}
+
 	fn get_eviction(&mut self) -> Option<K> {
 		match self.stack.pop_front() {
 			Some(key) => {

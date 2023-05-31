@@ -13,6 +13,8 @@ where
 	fn update(&mut self, _: &K);
 	fn remove(&mut self, _: &K);
 
+	fn clear(&mut self);
+
 	fn get_eviction(&mut self) -> Option<K>;
 }
 

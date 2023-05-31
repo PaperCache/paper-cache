@@ -26,8 +26,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let stats = Stats::new(10);
 	/// assert_eq!(stats.get_max_size(), 10);
 	/// ```
@@ -39,8 +37,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// // The cache is currently empty.
@@ -58,8 +54,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
@@ -80,8 +74,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// // The cache has not had any gets yet, therefore the
@@ -109,8 +101,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
@@ -130,8 +120,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
@@ -150,8 +138,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let stats = Stats::new(10);
 	/// assert_eq!(stats.get_max_size(), 10);
 	///
@@ -166,8 +152,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert_eq!(stats.get_used_size(), 10);
@@ -183,8 +167,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert_eq!(stats.get_used_size(), 10);
@@ -196,12 +178,26 @@ impl Stats {
 		self.used_size -= *size;
 	}
 
+	/// Sets the cache's used size to zero.
+	///
+	/// # Examples
+	/// ```
+	/// let mut stats = Stats::new(10);
+	///
+	/// stats.increase_used_size(5);
+	/// assert_eq!(stats.get_used_size(), 5);
+	///
+	/// stats.reset_used_size();
+	/// assert_eq!(stats.get_used_size(), 0);
+	/// ```
+	pub fn reset_used_size(&mut self) {
+		self.used_size = 0;
+	}
+
 	/// Returns true if the cache's maximum size exceeds the supplied size.
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	/// assert!(stats.max_size_exceeds(5));
 	/// assert!(!stats.max_size_exceeds(15));
@@ -214,8 +210,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// stats.increase_used_size(10);
@@ -232,8 +226,6 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::Stats;
-	///
 	/// let mut stats = Stats::new(10);
 	///
 	/// assert!(stats.target_size_to_fit(2), 8);

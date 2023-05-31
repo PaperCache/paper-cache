@@ -177,6 +177,19 @@ where
 		}
 	}
 
+	pub fn clear(&mut self) -> Result<(), CacheError> {
+		self.objects.clear();
+		self.expiries.clear();
+
+		for policy in &self.policies {
+			self.policy_stacks[policy.index()].clear();
+		}
+
+		self.stats.reset_used_size();
+
+		Ok(())
+	}
+
 	pub fn resize(&mut self, max_size: &CacheSize) -> Result<(), CacheError> {
 		if *max_size == 0 {
 			return Err(CacheError::new(
