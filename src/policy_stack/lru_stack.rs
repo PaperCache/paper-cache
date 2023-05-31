@@ -41,8 +41,8 @@ where
 	}
 
 	fn remove(&mut self, key: &K) {
-		if let Some(index) = self.map.get(key) {
-			self.stack.remove(*index);
+		if let Some(index) = self.map.remove(key) {
+			self.stack.remove(index);
 		}
 	}
 
