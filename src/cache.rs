@@ -87,15 +87,6 @@ where
 	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
 		match self.objects.get_mut(key) {
 			Some(object) => {
-				if object.is_expired() {
-					self.stats.miss();
-
-					return Err(CacheError::new(
-						ErrorKind::KeyNotFound,
-						"The key was not found in the cache."
-					));
-				}
-
 				self.stats.hit();
 
 				for policy in &self.policies {
@@ -158,13 +149,6 @@ where
 
 				for policy in &self.policies {
 					self.policy_stacks[policy.index()].remove(key);
-				}
-
-				if object.is_expired() {
-					return Err(CacheError::new(
-						ErrorKind::KeyNotFound,
-						"The key was not found in the cache."
-					));
 				}
 
 				Ok(())

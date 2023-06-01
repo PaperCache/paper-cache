@@ -35,14 +35,4 @@ impl<T: MemSize> Object<T> {
 	pub fn get_expiry(&self) -> &u64 {
 		&self.expiry
 	}
-
-	pub fn is_expired(&self) -> bool {
-		let now = utils::timestamp();
-
-		if self.expiry == 0 {
-			return false;
-		}
-
-		self.expiry < now
-	}
 }
