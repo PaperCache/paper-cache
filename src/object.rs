@@ -2,7 +2,7 @@ use kwik::utils;
 
 pub struct Object<T: MemSize> {
 	data: T,
-	expiry: u64,
+	expiry: Option<u64>,
 }
 
 pub trait MemSize {
@@ -11,11 +11,13 @@ pub trait MemSize {
 
 impl<T: MemSize> Object<T> {
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
-		let now = utils::timestamp();
-
 		let expiry = match ttl {
-			Some(ttl) => ttl as u64 * 1000 + now,
-			None => 0,
+			Some(0) | None => None,
+
+			Some(ttl) => {
+				let now = utils::timestamp();
+				Some(ttl as u64 * 1000 + now)
+			},
 		};
 
 		Object {
@@ -32,7 +34,7 @@ impl<T: MemSize> Object<T> {
 		self.data.mem_size() as u64
 	}
 
-	pub fn get_expiry(&self) -> &u64 {
-		&self.expiry
+	pub fn get_expiry(&self) -> Option<u64> {
+		self.expiry
 	}
 }

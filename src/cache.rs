@@ -110,7 +110,7 @@ where
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
 		let object = Object::new(value, ttl);
 		let size = object.get_size();
-		let expiry = *object.get_expiry();
+		let expiry = object.get_expiry();
 
 		if size == 0 {
 			return Err(CacheError::new(
@@ -135,7 +135,7 @@ where
 			self.policy_stacks[policy.index()].insert(&key);
 		}
 
-		if let Some(_) = ttl {
+		if let Some(expiry) = expiry {
 			self.expiries.insert(expiry, key);
 		}
 
