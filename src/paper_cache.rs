@@ -7,7 +7,7 @@ use crate::object::MemSize;
 use crate::stats::Stats;
 use crate::policy::Policy;
 use crate::cache::Cache;
-use crate::worker::ttl_worker;
+use crate::worker::{Worker, TtlWorker};
 pub use crate::cache::CacheSize;
 
 pub struct PaperCache<K, V>
@@ -51,14 +51,11 @@ where
 			Cache::<K, V>::new(max_size, policies)?
 		));
 
-		let ttl_cache = Arc::clone(&cache);
-		thread::spawn(move || {
-			ttl_worker(ttl_cache);
-		});
-
 		let paper_cache = PaperCache {
 			cache,
 		};
+
+		paper_cache.register_worker::<TtlWorker<K, V>>();
 
 		Ok(paper_cache)
 	}
@@ -180,6 +177,23 @@ where
 	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
 		cache.policy(policy)
+	}
+
+	/// Registers a new background worker which implements [`Worker`].
+	/// The worker will get a reference to the underlying cache.
+	///
+	/// # Examples
+	/// ```
+	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// cache.register_worker::<TtlWorker>();
+	/// ```
+	fn register_worker<T: Worker<K, V>>(&self) {
+		let cache = Arc::clone(&self.cache);
+		let worker = T::new(cache);
+
+		thread::spawn(move || {
+			worker.start();
+		});
 	}
 }
 

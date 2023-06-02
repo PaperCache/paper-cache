@@ -5,17 +5,33 @@ use std::thread;
 use std::time::Duration;
 use crate::object::MemSize;
 use crate::cache::Cache;
-use crate::worker::TIME_INCREMENT;
+use crate::worker::{Worker, TIME_INCREMENT};
 
-pub fn worker<K, V>(cache: Arc<Mutex<Cache<K, V>>>)
+pub struct TtlWorker<K, V>
 where
-	K: Eq + Hash + Copy + 'static + Display + Sync,
+	K: 'static + Eq + Hash + Copy + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
-	loop {
-		thread::sleep(Duration::from_millis(TIME_INCREMENT));
+	cache: Arc<Mutex<Cache<K, V>>>,
+}
 
-		let mut cache = cache.lock().unwrap();
-		cache.prune_expired();
+impl<K, V> Worker<K, V> for TtlWorker<K, V>
+where
+	K: 'static + Eq + Hash + Copy + Display + Sync,
+	V: 'static + Clone + Sync + MemSize,
+{
+	fn new(cache: Arc<Mutex<Cache<K, V>>>) -> Self {
+		TtlWorker {
+			cache,
+		}
+	}
+
+	fn start(&self) {
+		loop {
+			thread::sleep(Duration::from_millis(TIME_INCREMENT));
+
+			let mut cache = self.cache.lock().unwrap();
+			cache.prune_expired();
+		}
 	}
 }
