@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::hash::Hash;
-use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use kwik::utils;
 use crate::cache_error::{CacheError, ErrorKind};
@@ -8,6 +7,7 @@ use crate::stats::Stats;
 use crate::object::{Object, MemSize};
 use crate::policy::Policy;
 use crate::policy_stack::{PolicyStack, LruStack, MruStack};
+use crate::expiries::Expiries;
 
 pub type CacheSize = u64;
 
@@ -22,7 +22,7 @@ where
 	policy: &'static Policy,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
-	expiries: BTreeMap<u64, K>,
+	expiries: Expiries<K>,
 
 	objects: FxHashMap<K, Object<V>>,
 }
@@ -72,7 +72,7 @@ where
 			policy: initial_policy,
 			policy_stacks,
 
-			expiries: BTreeMap::new(),
+			expiries: Expiries::new(),
 
 			objects: FxHashMap::default(),
 		};
@@ -135,9 +135,7 @@ where
 			self.policy_stacks[policy.index()].insert(&key);
 		}
 
-		if let Some(expiry) = expiry {
-			self.expiries.insert(expiry, key);
-		}
+		self.expiries.insert(key, expiry);
 
 		Ok(())
 	}
@@ -150,6 +148,8 @@ where
 				for policy in &self.policies {
 					self.policy_stacks[policy.index()].remove(key);
 				}
+
+				self.expiries.remove(key, &object.get_expiry());
 
 				Ok(())
 			},
@@ -227,14 +227,14 @@ where
 	pub fn prune_expired(&mut self) {
 		let now = utils::timestamp();
 
-		while let Some((&expiry, &key)) = self.expiries.iter().next() {
+		/*while let Some((&expiry, &key)) = self.expiries.iter().next() {
 			if expiry > now {
 				return;
 			}
 
 			let _ = self.del(&key);
 			self.expiries.remove(&expiry);
-		}
+		}*/
 	}
 }
 
