@@ -56,7 +56,23 @@ impl<T: Eq + Hash> Expiries<T> {
 		}
 	}
 
-	pub fn next_timestamp(&self) -> Option<u64> {
+	pub fn expired(&mut self, now: &u64) -> Option<FxHashSet<T>> {
+		let first_expiry = match self.map.first_key_value() {
+			Some((expiry, _)) => expiry,
+
+			None => {
+				return None;
+			},
+		};
+
+		if first_expiry > now {
+			return None;
+		}
+
+		match self.map.pop_first() {
+			Some((_, keys)) => Some(keys),
+			None => None,
+		}
 	}
 
 	pub fn clear(&mut self) {

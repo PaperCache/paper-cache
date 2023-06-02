@@ -227,14 +227,11 @@ where
 	pub fn prune_expired(&mut self) {
 		let now = utils::timestamp();
 
-		/*while let Some((&expiry, &key)) = self.expiries.iter().next() {
-			if expiry > now {
-				return;
+		while let Some(expired) = self.expiries.expired(&now) {
+			for key in expired {
+				let _ = self.del(&key);
 			}
-
-			let _ = self.del(&key);
-			self.expiries.remove(&expiry);
-		}*/
+		}
 	}
 }
 
