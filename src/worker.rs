@@ -11,7 +11,7 @@ pub const TIME_INCREMENT: u64 = 500;
 pub trait Worker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	fn new(_: Arc<Mutex<Cache<K, V>>>) -> Self where Self: Sized;

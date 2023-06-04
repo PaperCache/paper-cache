@@ -12,7 +12,7 @@ pub use crate::cache::CacheSize;
 
 pub struct PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
@@ -20,7 +20,7 @@ where
 
 impl<K, V> PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
@@ -87,7 +87,7 @@ where
 	///
 	/// // Getting a key which exists in the cache will return the associated value.
 	/// assert_eq!(cache.get(0), Ok(1));
-	///	// Getting a key which does not exist in the cache will return a CacheError.
+	/// // Getting a key which does not exist in the cache will return a CacheError.
 	/// assert_eq!(cache.get(1), Err(_));
 	/// ```
 	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
@@ -199,6 +199,6 @@ where
 
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {}

@@ -13,6 +13,8 @@ pub mod stats;
 pub use stats::*;
 
 pub mod policy;
+pub use policy::*;
+
 mod policy_stack;
 
 mod object;

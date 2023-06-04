@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 pub trait PolicyStack<K>
 where
-	K: Eq + Hash + Copy,
+	K: Eq + Hash + Clone,
 {
 	fn new() -> Self where Self: Sized;
 

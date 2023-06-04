@@ -6,16 +6,16 @@ pub struct Expiries<T: Eq + Hash> {
 	map: BTreeMap<u64, FxHashSet<T>>,
 }
 
-impl<T: Eq + Hash> Expiries<T> {
+impl<T: Eq + Hash + Clone> Expiries<T> {
 	pub fn new() -> Self {
 		Expiries {
 			map: BTreeMap::new(),
 		}
 	}
 
-	pub fn insert(&mut self, key: T, expiry: Option<u64>) {
+	pub fn insert(&mut self, key: &T, expiry: &Option<u64>) {
 		let expiry = match expiry {
-			Some(expiry) => expiry,
+			Some(expiry) => *expiry,
 
 			None => {
 				return;
@@ -24,12 +24,12 @@ impl<T: Eq + Hash> Expiries<T> {
 
 		match self.map.get_mut(&expiry) {
 			Some(keys) => {
-				keys.insert(key);
+				keys.insert(key.clone());
 			},
 
 			None => {
 				let mut keys = FxHashSet::default();
-				keys.insert(key);
+				keys.insert(key.clone());
 
 				self.map.insert(expiry, keys);
 			},
@@ -45,7 +45,7 @@ impl<T: Eq + Hash> Expiries<T> {
 			},
 		};
 
-		match self.map.get_mut(&expiry) {
+		match self.map.get_mut(expiry) {
 			Some(keys) => {
 				keys.remove(key);
 			},
@@ -69,10 +69,7 @@ impl<T: Eq + Hash> Expiries<T> {
 			return None;
 		}
 
-		match self.map.pop_first() {
-			Some((_, keys)) => Some(keys),
-			None => None,
-		}
+		self.map.pop_first().map(|(_, keys)| keys)
 	}
 
 	pub fn clear(&mut self) {

@@ -13,7 +13,7 @@ pub type CacheSize = u64;
 
 pub struct Cache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	stats: Stats,
@@ -29,7 +29,7 @@ where
 
 impl<K, V> Cache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	pub fn new(
@@ -85,12 +85,12 @@ where
 	}
 
 	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
-		match self.objects.get_mut(key) {
-			Some(object) => {
+		match self.objects.get_key_value(key) {
+			Some((key, object)) => {
 				self.stats.hit();
 
 				for policy in &self.policies {
-					self.policy_stacks[policy.index()].update(&key);
+					self.policy_stacks[policy.index()].update(key);
 				}
 
 				Ok(object.get_data().clone())
@@ -110,7 +110,6 @@ where
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
 		let object = Object::new(value, ttl);
 		let size = object.get_size();
-		let expiry = object.get_expiry();
 
 		if size == 0 {
 			return Err(CacheError::new(
@@ -119,7 +118,7 @@ where
 			));
 		}
 
-		if !self.stats.max_size_exceeds(&size) {
+		if self.stats.exceeds_max_size(&size) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidValueSize,
 				"The value size cannot be larger than the cache size."
@@ -128,14 +127,17 @@ where
 
 		self.reduce(&self.stats.target_used_size_to_fit(&size))?;
 
-		self.objects.insert(key, object);
-		self.stats.increase_used_size(&size);
-
 		for policy in &self.policies {
 			self.policy_stacks[policy.index()].insert(&key);
 		}
 
-		self.expiries.insert(key, expiry);
+		self.expiries.insert(&key, &object.get_expiry());
+
+		if let Some(old_object) = self.objects.insert(key, object) {
+			self.stats.decrease_used_size(&old_object.get_size());
+		}
+
+		self.stats.increase_used_size(&size);
 
 		Ok(())
 	}
@@ -197,16 +199,19 @@ where
 		}
 
 		self.policy = policy;
+
 		Ok(())
 	}
 
 	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
 		while self.stats.used_size_exceeds(target_size) {
-			let policy_key = self.policy_stacks[self.policy.index()].get_eviction();
+			let policy_key = self.policy_stacks[
+				self.policy.index()
+			].get_eviction();
 
 			if let Some(key) = &policy_key {
-				if let Err(_) = self.del(key) {
+				if self.del(key).is_err() {
 					return Err(CacheError::new(
 						ErrorKind::Internal,
 						"An internal error has occured."
@@ -237,6 +242,6 @@ where
 
 unsafe impl<K, V> Send for Cache<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {}

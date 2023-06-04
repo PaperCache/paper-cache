@@ -9,7 +9,7 @@ use crate::worker::{Worker, TIME_INCREMENT};
 
 pub struct TtlWorker<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
@@ -17,7 +17,7 @@ where
 
 impl<K, V> Worker<K, V> for TtlWorker<K, V>
 where
-	K: 'static + Eq + Hash + Copy + Display + Sync,
+	K: 'static + Eq + Hash + Clone + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	fn new(cache: Arc<Mutex<Cache<K, V>>>) -> Self {

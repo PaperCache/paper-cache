@@ -194,16 +194,16 @@ impl Stats {
 		self.used_size = 0;
 	}
 
-	/// Returns true if the cache's maximum size exceeds the supplied size.
+	/// Returns true if the supplied size exceeds the cache's maximum size.
 	///
 	/// # Examples
 	/// ```
 	/// let mut stats = Stats::new(10);
-	/// assert!(stats.max_size_exceeds(5));
-	/// assert!(!stats.max_size_exceeds(15));
+	/// assert!(stats.exceeds_max_size(15));
+	/// assert!(!stats.exceeds_max_size(5));
 	/// ```
-	pub fn max_size_exceeds(&self, size: &u64) -> bool {
-		self.max_size > *size
+	pub fn exceeds_max_size(&self, size: &u64) -> bool {
+		*size > self.max_size
 	}
 
 	/// Returns true if the cache's used size exceeds the supplied size.
@@ -214,8 +214,8 @@ impl Stats {
 	///
 	/// stats.increase_used_size(10);
 	///
-	/// assert!(stats.max_size_exceeds(5));
-	/// assert!(!stats.max_size_exceeds(15));
+	/// assert!(stats.used_size_exceeds(5));
+	/// assert!(!stats.used_size_exceeds(15));
 	/// ```
 	pub fn used_size_exceeds(&self, size: &u64) -> bool {
 		self.used_size > *size

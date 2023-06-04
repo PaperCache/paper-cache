@@ -5,7 +5,7 @@ use crate::policy_stack::PolicyStack;
 
 pub struct LruStack<K>
 where
-	K: Eq + Hash + Copy,
+	K: Eq + Hash + Clone,
 {
 	map: FxHashMap<K, Index<K>>,
 	stack: VecList<K>,
@@ -13,7 +13,7 @@ where
 
 impl<K> PolicyStack<K> for LruStack<K>
 where
-	K: Eq + Hash + Copy,
+	K: Eq + Hash + Clone,
 {
 	fn new() -> Self {
 		LruStack {
@@ -24,18 +24,18 @@ where
 
 	fn insert(&mut self, key: &K) {
 		if self.map.contains_key(key) {
-			return;
+			return self.update(key);
 		}
 
-		let index = self.stack.push_front(*key);
-		self.map.insert(*key, index);
+		let index = self.stack.push_front(key.clone());
+		self.map.insert(key.clone(), index);
 	}
 
 	fn update(&mut self, key: &K) {
 		if let Some(index) = self.map.get(key) {
-			if let Some(_) = self.stack.remove(*index) {
-				let new_index = self.stack.push_front(*key);
-				self.map.insert(*key, new_index);
+			if self.stack.remove(*index).is_some() {
+				let new_index = self.stack.push_front(key.clone());
+				self.map.insert(key.clone(), new_index);
 			}
 		}
 	}
@@ -52,13 +52,12 @@ where
 	}
 
 	fn get_eviction(&mut self) -> Option<K> {
-		match self.stack.pop_back() {
-			Some(key) => {
-				self.map.remove(&key);
-				Some(key)
-			},
+		let evict_key = self.stack.pop_back();
 
-			None => None,
+		if let Some(key) = &evict_key {
+			self.map.remove(key);
 		}
+
+		evict_key
 	}
 }
