@@ -60,6 +60,17 @@ where
 		Ok(paper_cache)
 	}
 
+	/// Returns the current cache version.
+	///
+	/// # Examples
+	/// ```
+	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// assert_eq!(cache.version(), "0.1.0");
+	/// ```
+	pub fn version(&self) -> String {
+		env!("CARGO_PKG_VERSION").to_owned()
+	}
+
 	/// Returns the current statistics.
 	///
 	/// # Examples
