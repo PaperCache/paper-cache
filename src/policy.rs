@@ -11,11 +11,4 @@ impl Policy {
 			Policy::Mru => 1,
 		}
 	}
-
-	pub fn id(&self) -> String {
-		match self {
-			Policy::Lru => "lru".to_owned(),
-			Policy::Mru => "mru".to_owned(),
-		}
-	}
 }
