@@ -19,7 +19,6 @@ where
 	stats: Stats,
 
 	policies: Vec<&'static Policy>,
-	policy: &'static Policy,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
 	expiries: Expiries<K>,
@@ -63,13 +62,10 @@ where
 			Box::new(MruStack::<K>::new()),
 		];
 
-		let initial_policy = policies[0];
-
 		let cache = Cache {
-			stats: Stats::new(max_size),
+			stats: Stats::new(max_size, policies[0].to_owned()),
 
 			policies,
-			policy: initial_policy,
 			policy_stacks,
 
 			expiries: Expiries::new(),
@@ -198,7 +194,7 @@ where
 			));
 		}
 
-		self.policy = policy;
+		self.stats.set_policy(policy.to_owned());
 
 		Ok(())
 	}
@@ -207,7 +203,7 @@ where
 	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
 		while self.stats.used_size_exceeds(target_size) {
 			let policy_key = self.policy_stacks[
-				self.policy.index()
+				self.stats.get_policy().index()
 			].get_eviction();
 
 			if let Some(key) = &policy_key {

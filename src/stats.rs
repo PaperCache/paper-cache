@@ -1,4 +1,5 @@
 use crate::cache::CacheSize;
+use crate::policy::Policy;
 
 #[derive(Clone, Copy)]
 pub struct Stats {
@@ -7,18 +8,22 @@ pub struct Stats {
 
 	total_hits: u64,
 	total_gets: u64,
+
+	policy: Policy,
 }
 
 /// This struct holds the basic statistical information about `PaperCache`.
 impl Stats {
 	/// Creates an empty statistics manager.
-	pub fn new(max_size: CacheSize) -> Self {
+	pub fn new(max_size: CacheSize, policy: Policy) -> Self {
 		Stats {
 			max_size,
 			used_size: 0,
 
 			total_hits: 0,
 			total_gets: 0,
+
+			policy,
 		}
 	}
 
@@ -26,7 +31,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let stats = Stats::new(10);
+	/// let stats = Stats::new(10, Policy::Lru);
 	/// assert_eq!(stats.get_max_size(), 10);
 	/// ```
 	pub fn get_max_size(&self) -> &CacheSize {
@@ -37,7 +42,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// // The cache is currently empty.
 	/// assert_eq!(stats.get_used_size(), 0);
@@ -54,7 +59,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
 	///
@@ -74,7 +79,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// // The cache has not had any gets yet, therefore the
 	/// // miss ratio should be one.
@@ -97,11 +102,31 @@ impl Stats {
 		1.0 - self.total_hits as f64 / self.total_gets as f64
 	}
 
+	/// Returns the cache's current eviction policy.
+	///
+	/// # Examples
+	/// ```
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert_eq!(stats.get_total_gets(), 0);
+	///
+	/// stats.hit();
+	///
+	/// assert_eq!(stats.get_total_gets(), 1);
+	///
+	/// // The cache gets filled.
+	/// stats.increase_used_size(10);
+	/// assert_eq!(stats.get_used_size(), 10);
+	/// ```
+	pub fn get_policy(&self) -> &Policy {
+		&self.policy
+	}
+
 	/// Records a cache hit and increments the total gets counter.
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
@@ -120,7 +145,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
@@ -138,7 +163,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let stats = Stats::new(10);
+	/// let stats = Stats::new(10, Policy::Lru);
 	/// assert_eq!(stats.get_max_size(), 10);
 	///
 	/// stats.set_max_size(5);
@@ -152,7 +177,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_used_size(), 10);
 	///
@@ -167,7 +192,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_used_size(), 10);
 	///
@@ -182,7 +207,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// stats.increase_used_size(5);
 	/// assert_eq!(stats.get_used_size(), 5);
@@ -194,11 +219,24 @@ impl Stats {
 		self.used_size = 0;
 	}
 
+	/// Sets the cache's policy.
+	///
+	/// # Examples
+	/// ```
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// stats.set_policy(Policy::Mru);
+	/// assert_eq!(stats.get_policy(), &Policy::Mru);
+	/// ```
+	pub fn set_policy(&mut self, policy: Policy) {
+		self.policy = policy;
+	}
+
 	/// Returns true if the supplied size exceeds the cache's maximum size.
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	/// assert!(stats.exceeds_max_size(15));
 	/// assert!(!stats.exceeds_max_size(5));
 	/// ```
@@ -210,7 +248,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// stats.increase_used_size(10);
 	///
@@ -226,7 +264,7 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let mut stats = Stats::new(10);
+	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert!(stats.target_size_to_fit(2), 8);
 	/// ```
