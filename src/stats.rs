@@ -1,3 +1,4 @@
+use kwik::utils;
 use crate::cache::CacheSize;
 use crate::policy::Policy;
 
@@ -10,6 +11,8 @@ pub struct Stats {
 	total_gets: u64,
 
 	policy: Policy,
+
+	start_time: u64,
 }
 
 /// This struct holds the basic statistical information about `PaperCache`.
@@ -24,6 +27,8 @@ impl Stats {
 			total_gets: 0,
 
 			policy,
+
+			start_time: utils::timestamp(),
 		}
 	}
 
@@ -108,18 +113,22 @@ impl Stats {
 	/// ```
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_total_gets(), 0);
-	///
-	/// stats.hit();
-	///
-	/// assert_eq!(stats.get_total_gets(), 1);
-	///
-	/// // The cache gets filled.
-	/// stats.increase_used_size(10);
-	/// assert_eq!(stats.get_used_size(), 10);
+	/// assert_eq!(stats.get_policy(), &Policy::Lru);
 	/// ```
 	pub fn get_policy(&self) -> &Policy {
 		&self.policy
+	}
+
+	/// Returns the cache's current uptime.
+	///
+	/// # Examples
+	/// ```
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert!(stats.get_uptime() >= 0);
+	/// ```
+	pub fn get_uptime(&self) -> u64 {
+		utils::timestamp() - self.start_time
 	}
 
 	/// Records a cache hit and increments the total gets counter.
