@@ -3,6 +3,7 @@ pub enum Policy {
 	Lfu,
 	Lru,
 	Mru,
+	Fifo,
 }
 
 impl Policy {
@@ -11,6 +12,7 @@ impl Policy {
 			Policy::Lfu => 0,
 			Policy::Lru => 1,
 			Policy::Mru => 2,
+			Policy::Fifo => 3,
 		}
 	}
 }

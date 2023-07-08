@@ -1,6 +1,7 @@
 mod lfu_stack;
 mod lru_stack;
 mod mru_stack;
+mod fifo_stack;
 
 use std::hash::Hash;
 
@@ -11,7 +12,7 @@ where
 	fn new() -> Self where Self: Sized;
 
 	fn insert(&mut self, _: &K);
-	fn update(&mut self, _: &K);
+	fn update(&mut self, _: &K) {}
 	fn remove(&mut self, _: &K);
 
 	fn clear(&mut self);
@@ -22,3 +23,4 @@ where
 pub use crate::policy_stack::lfu_stack::*;
 pub use crate::policy_stack::lru_stack::*;
 pub use crate::policy_stack::mru_stack::*;
+pub use crate::policy_stack::fifo_stack::*;

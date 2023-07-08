@@ -12,7 +12,8 @@ use crate::policy_stack::{
 	PolicyStack,
 	LfuStack,
 	LruStack,
-	MruStack
+	MruStack,
+	FifoStack,
 };
 
 pub type CacheSize = u64;
@@ -60,13 +61,19 @@ where
 				policies
 			},
 
-			None => vec![&Policy::Lfu, &Policy::Lru, &Policy::Mru],
+			None => vec![
+				&Policy::Lfu,
+				&Policy::Lru,
+				&Policy::Mru,
+				&Policy::Fifo
+			],
 		};
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
 			Box::new(LfuStack::<K>::new()),
 			Box::new(LruStack::<K>::new()),
 			Box::new(MruStack::<K>::new()),
+			Box::new(FifoStack::<K>::new()),
 		];
 
 		let cache = Cache {
