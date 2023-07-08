@@ -98,7 +98,7 @@ where
 	K: Eq + Hash + Clone,
 {
 	fn init_counts(&mut self, min_count: u64) {
-		while self.counts.len() < min_count as usize {
+		while self.counts.len() <= min_count as usize {
 			self.counts.push(VecList::new());
 		}
 	}
