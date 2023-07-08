@@ -1,5 +1,6 @@
 mod lru_stack;
 mod mru_stack;
+mod lfu_stack;
 
 use std::hash::Hash;
 
@@ -20,3 +21,4 @@ where
 
 pub use crate::policy_stack::lru_stack::*;
 pub use crate::policy_stack::mru_stack::*;
+pub use crate::policy_stack::lfu_stack::*;

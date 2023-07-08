@@ -6,7 +6,7 @@ use crate::cache_error::{CacheError, ErrorKind};
 use crate::stats::Stats;
 use crate::object::{Object, MemSize};
 use crate::policy::Policy;
-use crate::policy_stack::{PolicyStack, LruStack, MruStack};
+use crate::policy_stack::{PolicyStack, LruStack, MruStack, LfuStack};
 use crate::expiries::Expiries;
 
 pub type CacheSize = u64;
@@ -60,6 +60,7 @@ where
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
 			Box::new(LruStack::<K>::new()),
 			Box::new(MruStack::<K>::new()),
+			Box::new(LfuStack::<K>::new()),
 		];
 
 		let cache = Cache {
@@ -159,7 +160,7 @@ where
 		}
 	}
 
-	pub fn clear(&mut self) -> Result<(), CacheError> {
+	pub fn wipe(&mut self) -> Result<(), CacheError> {
 		self.objects.clear();
 		self.expiries.clear();
 

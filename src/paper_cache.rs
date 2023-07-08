@@ -143,16 +143,16 @@ where
 	}
 
 	/// Deletes all objects in the cache and sets the cache's used size to zero.
-	/// Returns a [`CacheError`] if the objects could not be cleared.
+	/// Returns a [`CacheError`] if the objects could not be wiped.
 	///
 	/// # Examples
 	/// ```
 	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
-	/// cache.clear();
+	/// cache.wipe();
 	/// ```
-	pub fn clear(&mut self) -> Result<(), CacheError> {
+	pub fn wipe(&mut self) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
-		cache.clear()
+		cache.wipe()
 	}
 
 	/// Resizes the cache to the supplied maximum size.
