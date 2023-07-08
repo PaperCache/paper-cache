@@ -1,16 +1,16 @@
 #[derive(PartialEq, Clone, Copy)]
 pub enum Policy {
+	Lfu,
 	Lru,
 	Mru,
-	Lfu,
 }
 
 impl Policy {
 	pub fn index(&self) -> usize {
 		match self {
-			Policy::Lru => 0,
-			Policy::Mru => 1,
-			Policy::Lfu => 2,
+			Policy::Lfu => 0,
+			Policy::Lru => 1,
+			Policy::Mru => 2,
 		}
 	}
 }

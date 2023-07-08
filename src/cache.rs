@@ -6,8 +6,14 @@ use crate::cache_error::{CacheError, ErrorKind};
 use crate::stats::Stats;
 use crate::object::{Object, MemSize};
 use crate::policy::Policy;
-use crate::policy_stack::{PolicyStack, LruStack, MruStack, LfuStack};
 use crate::expiries::Expiries;
+
+use crate::policy_stack::{
+	PolicyStack,
+	LfuStack,
+	LruStack,
+	MruStack
+};
 
 pub type CacheSize = u64;
 
@@ -54,13 +60,13 @@ where
 				policies
 			},
 
-			None => vec![&Policy::Lru, &Policy::Mru],
+			None => vec![&Policy::Lfu, &Policy::Lru, &Policy::Mru],
 		};
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
+			Box::new(LfuStack::<K>::new()),
 			Box::new(LruStack::<K>::new()),
 			Box::new(MruStack::<K>::new()),
-			Box::new(LfuStack::<K>::new()),
 		];
 
 		let cache = Cache {
