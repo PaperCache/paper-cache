@@ -135,6 +135,8 @@ where
 			));
 		}
 
+		self.stats.set();
+
 		self.reduce(&self.stats.target_used_size_to_fit(&size))?;
 
 		for policy in &self.policies {
@@ -155,6 +157,7 @@ where
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
 		match self.objects.remove(key) {
 			Some(object) => {
+				self.stats.del();
 				self.stats.decrease_used_size(&object.get_size());
 
 				for policy in &self.policies {

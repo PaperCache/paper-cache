@@ -9,6 +9,8 @@ pub struct Stats {
 
 	total_hits: u64,
 	total_gets: u64,
+	total_sets: u64,
+	total_dels: u64,
 
 	policy: Policy,
 
@@ -25,6 +27,8 @@ impl Stats {
 
 			total_hits: 0,
 			total_gets: 0,
+			total_sets: 0,
+			total_dels: 0,
 
 			policy,
 
@@ -77,13 +81,45 @@ impl Stats {
 	/// stats.hit();
 	///
 	/// assert_eq!(*stats.get_total_gets(), 1);
-	///
-	/// // The cache gets filled.
-	/// stats.increase_used_size(&10);
-	/// assert_eq!(*stats.get_used_size(), 10);
 	/// ```
 	pub fn get_total_gets(&self) -> &u64 {
 		&self.total_gets
+	}
+
+	/// Returns the cache's total number of sets.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert_eq!(*stats.get_total_sets(), 0);
+	///
+	/// stats.set();
+	///
+	/// assert_eq!(*stats.get_total_sets(), 1);
+	/// ```
+	pub fn get_total_sets(&self) -> &u64 {
+		&self.total_sets
+	}
+
+	/// Returns the cache's total number of dels.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert_eq!(*stats.get_total_dels(), 0);
+	///
+	/// stats.del();
+	///
+	/// assert_eq!(*stats.get_total_dels(), 1);
+	/// ```
+	pub fn get_total_dels(&self) -> &u64 {
+		&self.total_dels
 	}
 
 	/// Returns the cache's current miss ratio.
@@ -181,6 +217,42 @@ impl Stats {
 	/// ```
 	pub fn miss(&mut self) {
 		self.total_gets += 1;
+	}
+
+	/// Increments the total sets counter.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert_eq!(*stats.get_total_sets(), 0);
+	///
+	/// stats.set();
+	///
+	/// assert_eq!(*stats.get_total_sets(), 1);
+	/// ```
+	pub fn set(&mut self) {
+		self.total_sets += 1;
+	}
+
+	/// Increments the total dels counter.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	///
+	/// assert_eq!(*stats.get_total_dels(), 0);
+	///
+	/// stats.del();
+	///
+	/// assert_eq!(*stats.get_total_dels(), 1);
+	/// ```
+	pub fn del(&mut self) {
+		self.total_dels += 1;
 	}
 
 	/// Sets the cache's maximum size.
