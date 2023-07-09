@@ -103,3 +103,33 @@ where
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn eviction_order_is_correct() {
+		use crate::policy_stack::{PolicyStack, LfuStack};
+
+		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
+		let mut evictions: Vec<u32> = vec![0, 1, 2, 3];
+
+		let mut stack = LfuStack::<u32>::new();
+
+		for access in &accesses {
+			stack.insert(access);
+		}
+
+		let mut eviction_count = 0;
+
+		while let Some(key) = stack.get_eviction() {
+			match evictions.pop() {
+				Some(eviction) => assert_eq!(key, eviction),
+				None => assert!(false),
+			}
+
+			eviction_count += 1;
+		}
+
+		assert_eq!(eviction_count, 4);
+	}
+}

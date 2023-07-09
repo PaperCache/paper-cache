@@ -36,8 +36,10 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let stats = Stats::new(10, Policy::Lru);
-	/// assert_eq!(stats.get_max_size(), 10);
+	/// assert_eq!(*stats.get_max_size(), 10);
 	/// ```
 	pub fn get_max_size(&self) -> &CacheSize {
 		&self.max_size
@@ -47,14 +49,16 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// // The cache is currently empty.
-	/// assert_eq!(stats.get_used_size(), 0);
+	/// assert_eq!(*stats.get_used_size(), 0);
 	///
 	/// // The cache gets filled.
-	/// stats.increase_used_size(10);
-	/// assert_eq!(stats.get_used_size(), 10);
+	/// stats.increase_used_size(&10);
+	/// assert_eq!(*stats.get_used_size(), 10);
 	/// ```
 	pub fn get_used_size(&self) -> &CacheSize {
 		&self.used_size
@@ -64,17 +68,19 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_total_gets(), 0);
+	/// assert_eq!(*stats.get_total_gets(), 0);
 	///
 	/// stats.hit();
 	///
-	/// assert_eq!(stats.get_total_gets(), 1);
+	/// assert_eq!(*stats.get_total_gets(), 1);
 	///
 	/// // The cache gets filled.
-	/// stats.increase_used_size(10);
-	/// assert_eq!(stats.get_used_size(), 10);
+	/// stats.increase_used_size(&10);
+	/// assert_eq!(*stats.get_used_size(), 10);
 	/// ```
 	pub fn get_total_gets(&self) -> &u64 {
 		&self.total_gets
@@ -84,6 +90,8 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// // The cache has not had any gets yet, therefore the
@@ -97,7 +105,6 @@ impl Stats {
 	/// stats.miss();
 	///
 	/// assert_eq!(stats.get_miss_ratio(), 0.25);
-	/// stats.
 	/// ```
 	pub fn get_miss_ratio(&self) -> f64 {
 		if self.total_gets == 0 {
@@ -111,6 +118,8 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert_eq!(stats.get_policy(), &Policy::Lru);
@@ -123,6 +132,8 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// assert!(stats.get_uptime() >= 0);
@@ -135,14 +146,16 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_total_gets(), 0);
+	/// assert_eq!(*stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	///
-	/// self.hit();
+	/// stats.hit();
 	///
-	/// assert_eq!(stats.get_total_gets(), 1);
+	/// assert_eq!(*stats.get_total_gets(), 1);
 	/// assert_eq!(stats.get_miss_ratio(), 0.0);
 	/// ```
 	pub fn hit(&mut self) {
@@ -154,14 +167,16 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_total_gets(), 0);
+	/// assert_eq!(*stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	///
-	/// self.miss();
+	/// stats.miss();
 	///
-	/// assert_eq!(stats.get_total_gets(), 1);
+	/// assert_eq!(*stats.get_total_gets(), 1);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	/// ```
 	pub fn miss(&mut self) {
@@ -172,11 +187,13 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
-	/// let stats = Stats::new(10, Policy::Lru);
-	/// assert_eq!(stats.get_max_size(), 10);
+	/// use paper_cache::{Stats, Policy};
 	///
-	/// stats.set_max_size(5);
-	/// assert_eq!(stats.get_max_size(), 5);
+	/// let mut stats = Stats::new(10, Policy::Lru);
+	/// assert_eq!(*stats.get_max_size(), 10);
+	///
+	/// stats.set_max_size(&5);
+	/// assert_eq!(*stats.get_max_size(), 5);
 	/// ```
 	pub fn set_max_size(&mut self, max_size: &u64) {
 		self.max_size = *max_size;
@@ -186,12 +203,14 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_used_size(), 10);
+	/// assert_eq!(*stats.get_used_size(), 0);
 	///
-	/// stats.increase_used_size(5);
-	/// assert_eq!(stats.get_used_size(), 15);
+	/// stats.increase_used_size(&5);
+	/// assert_eq!(*stats.get_used_size(), 5);
 	/// ```
 	pub fn increase_used_size(&mut self, size: &u64) {
 		self.used_size += *size;
@@ -201,12 +220,15 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.get_used_size(), 10);
+	/// stats.increase_used_size(&10);
+	/// assert_eq!(*stats.get_used_size(), 10);
 	///
-	/// stats.decrease_used_size(5);
-	/// assert_eq!(stats.get_used_size(), 5);
+	/// stats.decrease_used_size(&5);
+	/// assert_eq!(*stats.get_used_size(), 5);
 	/// ```
 	pub fn decrease_used_size(&mut self, size: &u64) {
 		self.used_size -= *size;
@@ -216,13 +238,15 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// stats.increase_used_size(5);
-	/// assert_eq!(stats.get_used_size(), 5);
+	/// stats.increase_used_size(&5);
+	/// assert_eq!(*stats.get_used_size(), 5);
 	///
 	/// stats.reset_used_size();
-	/// assert_eq!(stats.get_used_size(), 0);
+	/// assert_eq!(*stats.get_used_size(), 0);
 	/// ```
 	pub fn reset_used_size(&mut self) {
 		self.used_size = 0;
@@ -232,6 +256,8 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// stats.set_policy(Policy::Mru);
@@ -245,9 +271,11 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
-	/// assert!(stats.exceeds_max_size(15));
-	/// assert!(!stats.exceeds_max_size(5));
+	/// assert!(stats.exceeds_max_size(&15));
+	/// assert!(!stats.exceeds_max_size(&5));
 	/// ```
 	pub fn exceeds_max_size(&self, size: &u64) -> bool {
 		*size > self.max_size
@@ -257,12 +285,14 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// stats.increase_used_size(10);
+	/// stats.increase_used_size(&10);
 	///
-	/// assert!(stats.used_size_exceeds(5));
-	/// assert!(!stats.used_size_exceeds(15));
+	/// assert!(stats.used_size_exceeds(&5));
+	/// assert!(!stats.used_size_exceeds(&15));
 	/// ```
 	pub fn used_size_exceeds(&self, size: &u64) -> bool {
 		self.used_size > *size
@@ -273,9 +303,11 @@ impl Stats {
 	///
 	/// # Examples
 	/// ```
+	/// use paper_cache::{Stats, Policy};
+	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert!(stats.target_size_to_fit(2), 8);
+	/// assert_eq!(stats.target_used_size_to_fit(&2), 8);
 	/// ```
 	pub fn target_used_size_to_fit(&self, size: &u64) -> u64 {
 		self.max_size - *size

@@ -30,18 +30,28 @@ where
 	/// `policies` is zero. If `None` is passed here, the cache
 	/// will consider all eviction policies.
 	///
-	/// The cache's initial eviction policy will be LRU.
+	/// The cache's initial eviction policy will be the first policy or
+	/// LFU if `None` is passed.
 	///
 	/// # Examples
 	///
 	/// ```
-	/// assert_eq!(Cache::<u32, u32>::new(100, Some(&[&Policy::Lru])), Ok(_));
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
+	///
+	/// assert!(PaperCache::<u32, Object>::new(100, Some(vec![&Policy::Lru])).is_ok());
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert_eq!(Cache::<u32, u32>::new(0, Some(&[&Policy::Lru])), Err(_));
+	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![&Policy::Lru])).is_err());
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
-	/// assert_eq!(Cache::<u32, u32>::new(0, Some(&[])), Err(_));
+	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![])).is_err());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
@@ -64,8 +74,17 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
+	///
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	/// assert_eq!(cache.version(), "0.1.0");
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn version(&self) -> String {
 		env!("CARGO_PKG_VERSION").to_owned()
@@ -75,11 +94,20 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
 	///
-	/// cache.set(0, 1, None);
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	///
-	/// assert_eq!(cache.stats().get_used_size(), 1);
+	/// cache.set(0, Object, None);
+	///
+	/// assert_eq!(*cache.stats().get_used_size(), 4);
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn stats(&self) -> Stats {
 		let cache = self.cache.lock().unwrap();
@@ -92,14 +120,23 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
 	///
-	/// cache.set(0, 1, None);
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	///
+	/// cache.set(0, Object, None);
 	///
 	/// // Getting a key which exists in the cache will return the associated value.
-	/// assert_eq!(cache.get(0), Ok(1));
+	/// assert!(cache.get(&0).is_ok());
 	/// // Getting a key which does not exist in the cache will return a CacheError.
-	/// assert_eq!(cache.get(1), Err(_));
+	/// assert!(cache.get(&1).is_err());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -115,9 +152,18 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
 	///
-	/// assert_eq!(cache.set(0, 1, None), Ok(_));
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	///
+	/// assert!(cache.set(0, Object, None).is_ok());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -129,13 +175,22 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
 	///
-	/// cache.set(0, 1, None);
-	/// assert_eq!(cache.del(0), Ok(_));
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	///
+	/// cache.set(0, Object, None);
+	/// assert!(cache.del(&0).is_ok());
 	///
 	/// // Deleting a key which does not exist in the cache will return a CacheError.
-	/// assert_eq!(cache.del(1), Err(_));
+	/// assert!(cache.del(&1).is_err());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -147,8 +202,17 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
+	///
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	/// cache.wipe();
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn wipe(&mut self) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -160,12 +224,21 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
+	/// use paper_cache::{PaperCache, ObjectMemSize};
 	///
-	/// assert_eq!(cache.resize(&1), Ok(_));
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	///
+	/// assert!(cache.resize(&1).is_ok());
 	///
 	/// // Resizing to a size of zero will return a CacheError.
-	/// assert_eq!(cache.resize(&0), Err(_));
+	/// assert!(cache.resize(&0).is_err());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn resize(&mut self, max_size: &CacheSize) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -178,12 +251,21 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, Some(&[Policy::Lru]));
+	/// use paper_cache::{PaperCache, ObjectMemSize, Policy};
 	///
-	/// assert_eq!(cache.policy(&Policy::Lru), Ok(_));
+	/// let mut cache = PaperCache::<u32, Object>::new(100, Some(vec![&Policy::Lru])).unwrap();
+	///
+	/// assert!(cache.policy(&Policy::Lru).is_ok());
 	///
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
-	/// assert_eq!(cache.policy(&Policy::Mru), Err(_));
+	/// assert!(cache.policy(&Policy::Mru).is_err());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
 	/// ```
 	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
@@ -192,12 +274,6 @@ where
 
 	/// Registers a new background worker which implements [`Worker`].
 	/// The worker will get a reference to the underlying cache.
-	///
-	/// # Examples
-	/// ```
-	/// let mut cache = PaperCache::<u32, u32>::new(100, None);
-	/// cache.register_worker::<TtlWorker>();
-	/// ```
 	fn register_worker<T: Worker<K, V>>(&self) {
 		let cache = Arc::clone(&self.cache);
 		let worker = T::new(cache);
