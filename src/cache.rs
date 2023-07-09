@@ -11,9 +11,9 @@ use crate::expiries::Expiries;
 use crate::policy_stack::{
 	PolicyStack,
 	LfuStack,
+	FifoStack,
 	LruStack,
 	MruStack,
-	FifoStack,
 };
 
 pub type CacheSize = u64;
@@ -63,17 +63,17 @@ where
 
 			None => vec![
 				&Policy::Lfu,
+				&Policy::Fifo,
 				&Policy::Lru,
 				&Policy::Mru,
-				&Policy::Fifo
 			],
 		};
 
 		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
 			Box::new(LfuStack::<K>::new()),
+			Box::new(FifoStack::<K>::new()),
 			Box::new(LruStack::<K>::new()),
 			Box::new(MruStack::<K>::new()),
-			Box::new(FifoStack::<K>::new()),
 		];
 
 		let cache = Cache {
