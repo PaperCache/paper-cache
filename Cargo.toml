@@ -9,4 +9,4 @@ edition = "2021"
 rustc-hash = "1.1.0"
 dlv-list = "0.5.0"
 kwik = { git = "https://github.com/KiaShakiba/kwik-rs.git", version = "0.1.0" }
-paper_core = { git = "ssh://git@github.com/Paper-Book/paper-core.git", version = "0.1.0" }
+paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", version = "0.1.0" }

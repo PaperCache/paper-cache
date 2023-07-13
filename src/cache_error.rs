@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-pub use paper_core::error::PaperError;
+pub use paper_utils::error::PaperError;
 
 #[derive(Debug)]
 pub enum ErrorKind {
