@@ -100,7 +100,7 @@ where
 	///
 	/// cache.set(0, Object, None);
 	///
-	/// assert_eq!(*cache.stats().get_used_size(), 4);
+	/// assert_eq!(cache.stats().get_used_size(), 4);
 	///
 	/// #[derive(Clone)]
 	/// struct Object;
@@ -228,10 +228,10 @@ where
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	///
-	/// assert!(cache.resize(&1).is_ok());
+	/// assert!(cache.resize(1).is_ok());
 	///
 	/// // Resizing to a size of zero will return a CacheError.
-	/// assert!(cache.resize(&0).is_err());
+	/// assert!(cache.resize(0).is_err());
 	///
 	/// #[derive(Clone)]
 	/// struct Object;
@@ -240,7 +240,7 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn resize(&mut self, max_size: &CacheSize) -> Result<(), CacheError> {
+	pub fn resize(&mut self, max_size: CacheSize) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
 		cache.resize(max_size)
 	}

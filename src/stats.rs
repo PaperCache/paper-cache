@@ -43,10 +43,10 @@ impl Stats {
 	/// use paper_cache::{Stats, Policy};
 	///
 	/// let stats = Stats::new(10, Policy::Lru);
-	/// assert_eq!(*stats.get_max_size(), 10);
+	/// assert_eq!(stats.get_max_size(), 10);
 	/// ```
-	pub fn get_max_size(&self) -> &CacheSize {
-		&self.max_size
+	pub fn get_max_size(&self) -> CacheSize {
+		self.max_size
 	}
 
 	/// Returns the cache's used size.
@@ -58,14 +58,14 @@ impl Stats {
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
 	/// // The cache is currently empty.
-	/// assert_eq!(*stats.get_used_size(), 0);
+	/// assert_eq!(stats.get_used_size(), 0);
 	///
 	/// // The cache gets filled.
-	/// stats.increase_used_size(&10);
-	/// assert_eq!(*stats.get_used_size(), 10);
+	/// stats.increase_used_size(10);
+	/// assert_eq!(stats.get_used_size(), 10);
 	/// ```
-	pub fn get_used_size(&self) -> &CacheSize {
-		&self.used_size
+	pub fn get_used_size(&self) -> CacheSize {
+		self.used_size
 	}
 
 	/// Returns the cache's total number of gets.
@@ -76,14 +76,14 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_gets(), 0);
+	/// assert_eq!(stats.get_total_gets(), 0);
 	///
 	/// stats.hit();
 	///
-	/// assert_eq!(*stats.get_total_gets(), 1);
+	/// assert_eq!(stats.get_total_gets(), 1);
 	/// ```
-	pub fn get_total_gets(&self) -> &u64 {
-		&self.total_gets
+	pub fn get_total_gets(&self) -> u64 {
+		self.total_gets
 	}
 
 	/// Returns the cache's total number of sets.
@@ -94,14 +94,14 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_sets(), 0);
+	/// assert_eq!(stats.get_total_sets(), 0);
 	///
 	/// stats.set();
 	///
-	/// assert_eq!(*stats.get_total_sets(), 1);
+	/// assert_eq!(stats.get_total_sets(), 1);
 	/// ```
-	pub fn get_total_sets(&self) -> &u64 {
-		&self.total_sets
+	pub fn get_total_sets(&self) -> u64 {
+		self.total_sets
 	}
 
 	/// Returns the cache's total number of dels.
@@ -112,14 +112,14 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_dels(), 0);
+	/// assert_eq!(stats.get_total_dels(), 0);
 	///
 	/// stats.del();
 	///
-	/// assert_eq!(*stats.get_total_dels(), 1);
+	/// assert_eq!(stats.get_total_dels(), 1);
 	/// ```
-	pub fn get_total_dels(&self) -> &u64 {
-		&self.total_dels
+	pub fn get_total_dels(&self) -> u64 {
+		self.total_dels
 	}
 
 	/// Returns the cache's current miss ratio.
@@ -186,12 +186,12 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_gets(), 0);
+	/// assert_eq!(stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	///
 	/// stats.hit();
 	///
-	/// assert_eq!(*stats.get_total_gets(), 1);
+	/// assert_eq!(stats.get_total_gets(), 1);
 	/// assert_eq!(stats.get_miss_ratio(), 0.0);
 	/// ```
 	pub fn hit(&mut self) {
@@ -207,12 +207,12 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_gets(), 0);
+	/// assert_eq!(stats.get_total_gets(), 0);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	///
 	/// stats.miss();
 	///
-	/// assert_eq!(*stats.get_total_gets(), 1);
+	/// assert_eq!(stats.get_total_gets(), 1);
 	/// assert_eq!(stats.get_miss_ratio(), 1.0);
 	/// ```
 	pub fn miss(&mut self) {
@@ -227,11 +227,11 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_sets(), 0);
+	/// assert_eq!(stats.get_total_sets(), 0);
 	///
 	/// stats.set();
 	///
-	/// assert_eq!(*stats.get_total_sets(), 1);
+	/// assert_eq!(stats.get_total_sets(), 1);
 	/// ```
 	pub fn set(&mut self) {
 		self.total_sets += 1;
@@ -245,11 +245,11 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_total_dels(), 0);
+	/// assert_eq!(stats.get_total_dels(), 0);
 	///
 	/// stats.del();
 	///
-	/// assert_eq!(*stats.get_total_dels(), 1);
+	/// assert_eq!(stats.get_total_dels(), 1);
 	/// ```
 	pub fn del(&mut self) {
 		self.total_dels += 1;
@@ -262,13 +262,13 @@ impl Stats {
 	/// use paper_cache::{Stats, Policy};
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
-	/// assert_eq!(*stats.get_max_size(), 10);
+	/// assert_eq!(stats.get_max_size(), 10);
 	///
-	/// stats.set_max_size(&5);
-	/// assert_eq!(*stats.get_max_size(), 5);
+	/// stats.set_max_size(5);
+	/// assert_eq!(stats.get_max_size(), 5);
 	/// ```
-	pub fn set_max_size(&mut self, max_size: &u64) {
-		self.max_size = *max_size;
+	pub fn set_max_size(&mut self, max_size: u64) {
+		self.max_size = max_size;
 	}
 
 	/// Increases the cache's used size by the supplied amount.
@@ -279,13 +279,13 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(*stats.get_used_size(), 0);
+	/// assert_eq!(stats.get_used_size(), 0);
 	///
-	/// stats.increase_used_size(&5);
-	/// assert_eq!(*stats.get_used_size(), 5);
+	/// stats.increase_used_size(5);
+	/// assert_eq!(stats.get_used_size(), 5);
 	/// ```
-	pub fn increase_used_size(&mut self, size: &u64) {
-		self.used_size += *size;
+	pub fn increase_used_size(&mut self, size: u64) {
+		self.used_size += size;
 	}
 
 	/// Decreases the cache's used size by the supplied amount.
@@ -296,14 +296,14 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// stats.increase_used_size(&10);
-	/// assert_eq!(*stats.get_used_size(), 10);
+	/// stats.increase_used_size(10);
+	/// assert_eq!(stats.get_used_size(), 10);
 	///
-	/// stats.decrease_used_size(&5);
-	/// assert_eq!(*stats.get_used_size(), 5);
+	/// stats.decrease_used_size(5);
+	/// assert_eq!(stats.get_used_size(), 5);
 	/// ```
-	pub fn decrease_used_size(&mut self, size: &u64) {
-		self.used_size -= *size;
+	pub fn decrease_used_size(&mut self, size: u64) {
+		self.used_size -= size;
 	}
 
 	/// Sets the cache's used size to zero.
@@ -314,11 +314,11 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// stats.increase_used_size(&5);
-	/// assert_eq!(*stats.get_used_size(), 5);
+	/// stats.increase_used_size(5);
+	/// assert_eq!(stats.get_used_size(), 5);
 	///
 	/// stats.reset_used_size();
-	/// assert_eq!(*stats.get_used_size(), 0);
+	/// assert_eq!(stats.get_used_size(), 0);
 	/// ```
 	pub fn reset_used_size(&mut self) {
 		self.used_size = 0;
@@ -346,11 +346,11 @@ impl Stats {
 	/// use paper_cache::{Stats, Policy};
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
-	/// assert!(stats.exceeds_max_size(&15));
-	/// assert!(!stats.exceeds_max_size(&5));
+	/// assert!(stats.exceeds_max_size(15));
+	/// assert!(!stats.exceeds_max_size(5));
 	/// ```
-	pub fn exceeds_max_size(&self, size: &u64) -> bool {
-		*size > self.max_size
+	pub fn exceeds_max_size(&self, size: u64) -> bool {
+		size > self.max_size
 	}
 
 	/// Returns true if the cache's used size exceeds the supplied size.
@@ -361,13 +361,13 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// stats.increase_used_size(&10);
+	/// stats.increase_used_size(10);
 	///
-	/// assert!(stats.used_size_exceeds(&5));
-	/// assert!(!stats.used_size_exceeds(&15));
+	/// assert!(stats.used_size_exceeds(5));
+	/// assert!(!stats.used_size_exceeds(15));
 	/// ```
-	pub fn used_size_exceeds(&self, size: &u64) -> bool {
-		self.used_size > *size
+	pub fn used_size_exceeds(&self, size: u64) -> bool {
+		self.used_size > size
 	}
 
 	/// Returns the target used size of the cache to be able to fit the
@@ -379,9 +379,9 @@ impl Stats {
 	///
 	/// let mut stats = Stats::new(10, Policy::Lru);
 	///
-	/// assert_eq!(stats.target_used_size_to_fit(&2), 8);
+	/// assert_eq!(stats.target_used_size_to_fit(2), 8);
 	/// ```
-	pub fn target_used_size_to_fit(&self, size: &u64) -> u64 {
-		self.max_size - *size
+	pub fn target_used_size_to_fit(&self, size: u64) -> u64 {
+		self.max_size - size
 	}
 }

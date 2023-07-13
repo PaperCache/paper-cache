@@ -128,7 +128,7 @@ where
 			));
 		}
 
-		if self.stats.exceeds_max_size(&size) {
+		if self.stats.exceeds_max_size(size) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidValueSize,
 				"The value size cannot be larger than the cache size."
@@ -137,19 +137,19 @@ where
 
 		self.stats.set();
 
-		self.reduce(&self.stats.target_used_size_to_fit(&size))?;
+		self.reduce(self.stats.target_used_size_to_fit(size))?;
 
 		for policy in &self.policies {
 			self.policy_stacks[policy.index()].insert(&key);
 		}
 
-		self.expiries.insert(&key, &object.get_expiry());
+		self.expiries.insert(&key, object.get_expiry());
 
 		if let Some(old_object) = self.objects.insert(key, object) {
-			self.stats.decrease_used_size(&old_object.get_size());
+			self.stats.decrease_used_size(old_object.get_size());
 		}
 
-		self.stats.increase_used_size(&size);
+		self.stats.increase_used_size(size);
 
 		Ok(())
 	}
@@ -158,13 +158,13 @@ where
 		match self.objects.remove(key) {
 			Some(object) => {
 				self.stats.del();
-				self.stats.decrease_used_size(&object.get_size());
+				self.stats.decrease_used_size(object.get_size());
 
 				for policy in &self.policies {
 					self.policy_stacks[policy.index()].remove(key);
 				}
 
-				self.expiries.remove(key, &object.get_expiry());
+				self.expiries.remove(key, object.get_expiry());
 
 				Ok(())
 			},
@@ -189,8 +189,8 @@ where
 		Ok(())
 	}
 
-	pub fn resize(&mut self, max_size: &CacheSize) -> Result<(), CacheError> {
-		if *max_size == 0 {
+	pub fn resize(&mut self, max_size: CacheSize) -> Result<(), CacheError> {
+		if max_size == 0 {
 			return Err(CacheError::new(
 				ErrorKind::InvalidCacheSize,
 				"The cache size cannot be zero."
@@ -217,7 +217,7 @@ where
 	}
 
 	/// Reduces the cache size to the maximum size.
-	fn reduce(&mut self, target_size: &CacheSize) -> Result<(), CacheError> {
+	fn reduce(&mut self, target_size: CacheSize) -> Result<(), CacheError> {
 		while self.stats.used_size_exceeds(target_size) {
 			let policy_key = self.policy_stacks[
 				self.stats.get_policy().index()
@@ -245,7 +245,7 @@ where
 	pub fn prune_expired(&mut self) {
 		let now = utils::timestamp();
 
-		while let Some(expired) = self.expiries.expired(&now) {
+		while let Some(expired) = self.expiries.expired(now) {
 			for key in expired {
 				let _ = self.del(&key);
 			}

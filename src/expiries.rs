@@ -13,13 +13,10 @@ impl<T: Eq + Hash + Clone> Expiries<T> {
 		}
 	}
 
-	pub fn insert(&mut self, key: &T, expiry: &Option<u64>) {
+	pub fn insert(&mut self, key: &T, expiry: Option<u64>) {
 		let expiry = match expiry {
-			Some(expiry) => *expiry,
-
-			None => {
-				return;
-			},
+			Some(expiry) => expiry,
+			None => return,
 		};
 
 		match self.map.get_mut(&expiry) {
@@ -36,27 +33,24 @@ impl<T: Eq + Hash + Clone> Expiries<T> {
 		}
 	}
 
-	pub fn remove(&mut self, key: &T, expiry: &Option<u64>) {
+	pub fn remove(&mut self, key: &T, expiry: Option<u64>) {
 		let expiry = match expiry {
 			Some(expiry) => expiry,
-
-			None => {
-				return;
-			},
+			None => return,
 		};
 
-		match self.map.get_mut(expiry) {
+		match self.map.get_mut(&expiry) {
 			Some(keys) => {
 				keys.remove(key);
 			},
 
 			None => {
-				self.map.remove(expiry);
+				self.map.remove(&expiry);
 			},
 		}
 	}
 
-	pub fn expired(&mut self, now: &u64) -> Option<FxHashSet<T>> {
+	pub fn expired(&mut self, now: u64) -> Option<FxHashSet<T>> {
 		let first_expiry = match self.map.first_key_value() {
 			Some((expiry, _)) => expiry,
 
@@ -65,7 +59,7 @@ impl<T: Eq + Hash + Clone> Expiries<T> {
 			},
 		};
 
-		if first_expiry > now {
+		if *first_expiry > now {
 			return None;
 		}
 
