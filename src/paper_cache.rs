@@ -1,13 +1,19 @@
-use std::sync::{Arc, Mutex};
-use std::fmt::Display;
-use std::hash::Hash;
-use std::thread;
-use crate::cache_error::CacheError;
-use crate::object::MemSize;
-use crate::stats::Stats;
-use crate::policy::Policy;
-use crate::cache::Cache;
-use crate::worker::{Worker, TtlWorker};
+use std::{
+    sync::{Arc, Mutex},
+    fmt::Display,
+    hash::Hash,
+    thread,
+};
+
+use crate::{
+    cache_error::CacheError,
+    object::MemSize,
+    stats::Stats,
+    policy::Policy,
+    cache::Cache,
+    worker::{Worker, TtlWorker},
+};
+
 pub use crate::cache::CacheSize;
 
 pub struct PaperCache<K, V>

@@ -1,5 +1,8 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
+
 pub use paper_utils::error::PaperError;
 
 #[derive(Debug)]

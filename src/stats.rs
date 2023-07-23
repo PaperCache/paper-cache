@@ -1,6 +1,9 @@
 use kwik::utils;
-use crate::cache::CacheSize;
-use crate::policy::Policy;
+
+use crate::{
+    cache::CacheSize,
+    policy::Policy,
+};
 
 #[derive(Clone, Copy)]
 pub struct Stats {

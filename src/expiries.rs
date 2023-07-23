@@ -1,5 +1,8 @@
-use std::hash::Hash;
-use std::collections::BTreeMap;
+use std::{
+    hash::Hash,
+    collections::BTreeMap,
+};
+
 use rustc_hash::FxHashSet;
 
 pub struct Expiries<T: Eq + Hash> {
