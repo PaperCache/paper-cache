@@ -44,10 +44,10 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// assert!(PaperCache::<u32, Object>::new(100, Some(vec![&Policy::Lru])).is_ok());
+	/// assert!(PaperCache::<u32, Object>::new(100, Some(vec![Policy::Lru])).is_ok());
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![&Policy::Lru])).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![Policy::Lru])).is_err());
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
 	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![])).is_err());
@@ -259,12 +259,12 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, ObjectMemSize, Policy};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, Some(vec![&Policy::Lru])).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, Some(vec![Policy::Lru])).unwrap();
 	///
-	/// assert!(cache.policy(&Policy::Lru).is_ok());
+	/// assert!(cache.policy(Policy::Lru).is_ok());
 	///
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
-	/// assert!(cache.policy(&Policy::Mru).is_err());
+	/// assert!(cache.policy(Policy::Mru).is_err());
 	///
 	/// #[derive(Clone)]
 	/// struct Object;
