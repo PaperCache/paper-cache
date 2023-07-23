@@ -61,7 +61,7 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		policies: Option<Vec<&'static Policy>>
+		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
 		let cache = Arc::new(Mutex::new(
 			Cache::<K, V>::new(max_size, policies)?
@@ -273,7 +273,7 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
+	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
 		let mut cache = self.cache.lock().unwrap();
 		cache.policy(policy)
 	}

@@ -30,7 +30,7 @@ where
 {
 	stats: Stats,
 
-	policies: Vec<&'static Policy>,
+	policies: Vec<Policy>,
 	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
 
 	expiries: Expiries<K>,
@@ -45,7 +45,7 @@ where
 {
 	pub fn new(
 		max_size: CacheSize,
-		policies: Option<Vec<&'static Policy>>
+		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::new(
@@ -67,10 +67,10 @@ where
 			},
 
 			None => vec![
-				&Policy::Lfu,
-				&Policy::Fifo,
-				&Policy::Lru,
-				&Policy::Mru,
+				Policy::Lfu,
+				Policy::Fifo,
+				Policy::Lru,
+				Policy::Mru,
 			],
 		};
 
@@ -208,7 +208,7 @@ where
 		Ok(())
 	}
 
-	pub fn policy(&mut self, policy: &'static Policy) -> Result<(), CacheError> {
+	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
 		if !self.policies.contains(&policy) {
 			return Err(CacheError::new(
 				ErrorKind::InvalidPolicy,

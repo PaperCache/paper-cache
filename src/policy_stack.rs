@@ -20,7 +20,9 @@ where
 	fn get_eviction(&mut self) -> Option<K>;
 }
 
-pub use crate::policy_stack::lfu_stack::*;
-pub use crate::policy_stack::lru_stack::*;
-pub use crate::policy_stack::mru_stack::*;
-pub use crate::policy_stack::fifo_stack::*;
+pub use crate::policy_stack::{
+    lfu_stack::*,
+    lru_stack::*,
+    mru_stack::*,
+    fifo_stack::*,
+};
