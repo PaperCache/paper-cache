@@ -21,8 +21,8 @@ where
 }
 
 pub use crate::policy_stack::{
-    lfu_stack::*,
-    lru_stack::*,
-    mru_stack::*,
-    fifo_stack::*,
+	lfu_stack::*,
+	lru_stack::*,
+	mru_stack::*,
+	fifo_stack::*,
 };
