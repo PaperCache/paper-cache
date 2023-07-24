@@ -1,17 +1,17 @@
 use std::{
-    sync::{Arc, Mutex},
-    fmt::Display,
-    hash::Hash,
-    thread,
+	sync::{Arc, Mutex},
+	fmt::Display,
+	hash::Hash,
+	thread,
 };
 
 use crate::{
-    cache_error::CacheError,
-    object::MemSize,
-    stats::Stats,
-    policy::Policy,
-    cache::Cache,
-    worker::{Worker, TtlWorker},
+	cache_error::CacheError,
+	object::MemSize,
+	stats::Stats,
+	policy::Policy,
+	cache::Cache,
+	worker::{Worker, TtlWorker},
 };
 
 pub use crate::cache::CacheSize;

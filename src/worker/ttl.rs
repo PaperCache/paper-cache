@@ -1,15 +1,15 @@
 use std::{
-    sync::{Arc, Mutex},
-    fmt::Display,
-    hash::Hash,
-    thread,
-    time::Duration,
+	sync::{Arc, Mutex},
+	fmt::Display,
+	hash::Hash,
+	thread,
+	time::Duration,
 };
 
 use crate::{
-    object::MemSize,
-    cache::Cache,
-    worker::{Worker, TIME_INCREMENT},
+	object::MemSize,
+	cache::Cache,
+	worker::{Worker, TIME_INCREMENT},
 };
 
 pub struct TtlWorker<K, V>

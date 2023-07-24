@@ -1,6 +1,6 @@
 use std::{
-    error::Error,
-    fmt::{Display, Formatter},
+	error::Error,
+	fmt::{Display, Formatter},
 };
 
 pub use paper_utils::error::PaperError;

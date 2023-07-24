@@ -1,6 +1,6 @@
 use std::{
-    hash::Hash,
-    collections::BTreeMap,
+	hash::Hash,
+	collections::BTreeMap,
 };
 
 use rustc_hash::FxHashSet;

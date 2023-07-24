@@ -1,24 +1,24 @@
 use std::{
-    fmt::Display,
-    hash::Hash,
+	fmt::Display,
+	hash::Hash,
 };
 
 use rustc_hash::FxHashMap;
 use kwik::utils;
 
 use crate::{
-    cache_error::{CacheError, ErrorKind},
-    stats::Stats,
-    object::{Object, MemSize},
-    policy::Policy,
-    expiries::Expiries,
-    policy_stack::{
-        PolicyStack,
-        LfuStack,
-        FifoStack,
-        LruStack,
-        MruStack,
-    },
+	cache_error::{CacheError, ErrorKind},
+	stats::Stats,
+	object::{Object, MemSize},
+	policy::Policy,
+	expiries::Expiries,
+	policy_stack::{
+		PolicyStack,
+		LfuStack,
+		FifoStack,
+		LruStack,
+		MruStack,
+	},
 };
 
 pub type CacheSize = u64;

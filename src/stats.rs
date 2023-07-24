@@ -1,8 +1,8 @@
 use kwik::utils;
 
 use crate::{
-    cache::CacheSize,
-    policy::Policy,
+	cache::CacheSize,
+	policy::Policy,
 };
 
 #[derive(Clone, Copy)]

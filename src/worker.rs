@@ -1,14 +1,14 @@
 mod ttl;
 
 use std::{
-    sync::{Arc, Mutex},
-    fmt::Display,
-    hash::Hash,
+	sync::{Arc, Mutex},
+	fmt::Display,
+	hash::Hash,
 };
 
 use crate::{
-    object::MemSize,
-    cache::Cache,
+	object::MemSize,
+	cache::Cache,
 };
 
 pub const TIME_INCREMENT: u64 = 500;
