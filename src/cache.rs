@@ -1,9 +1,9 @@
 use std::{
 	fmt::Display,
 	hash::Hash,
+	collections::HashMap,
 };
 
-use rustc_hash::FxHashMap;
 use kwik::utils;
 
 use crate::{
@@ -35,7 +35,7 @@ where
 
 	expiries: Expiries<K>,
 
-	objects: FxHashMap<K, Object<V>>,
+	objects: HashMap<K, Object<V>>,
 }
 
 impl<K, V> Cache<K, V>
@@ -89,7 +89,7 @@ where
 
 			expiries: Expiries::new(),
 
-			objects: FxHashMap::default(),
+			objects: HashMap::new(),
 		};
 
 		Ok(cache)
