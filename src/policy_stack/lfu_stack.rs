@@ -7,10 +7,18 @@ pub struct LfuStack<K>
 where
 	K: Eq + Hash + Clone,
 {
-	count_map: FxHashMap<K, u64>,
-	index_map: FxHashMap<K, Index<K>>,
+	index_map: FxHashMap<K, KeyIndex<K>>,
+	count_lists: VecList<CountList<K>>,
+}
 
-	counts: Vec<VecList<K>>,
+struct CountList<K> {
+	count: u64,
+	list: VecList<K>,
+}
+
+struct KeyIndex<K> {
+	count_list_index: Index<CountList<K>>,
+	list_index: Index<K>,
 }
 
 impl<K> PolicyStack<K> for LfuStack<K>
@@ -19,87 +27,147 @@ where
 {
 	fn new() -> Self {
 		LfuStack {
-			count_map: FxHashMap::default(),
 			index_map: FxHashMap::default(),
-
-			counts: Vec::new(),
+			count_lists: VecList::new(),
 		}
 	}
 
 	fn insert(&mut self, key: &K) {
-		if self.count_map.contains_key(key) {
+		if self.index_map.contains_key(key) {
 			return self.update(key);
 		}
 
-		self.init_counts(1);
+		if !self.count_lists.front().is_some_and(|count_list| count_list.count == 1) {
+			self.count_lists.push_front(CountList::new(1));
+		}
 
-		let index = self.counts[0].push_front(key.clone());
+		let count_list_index = self.count_lists.front_index().unwrap();
+		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
 
-		self.count_map.insert(key.clone(), 0);
-		self.index_map.insert(key.clone(), index);
+		let list_index = count_list.push(key.clone());
+
+		self.index_map.insert(key.clone(), KeyIndex::new(
+			count_list_index,
+			list_index
+		));
 	}
 
 	fn update(&mut self, key: &K) {
-		if let (Some(count), Some(index)) = (
-			self.count_map.get(key),
-			self.index_map.get(key),
-		) {
-			if self.counts[*count as usize].remove(*index).is_some() {
-				let count = *count + 1;
+		let Some(key_index) = self.index_map.get(key) else {
+			return;
+		};
 
-				self.init_counts(count);
-				self.count_map.insert(key.clone(), count);
+		let prev_count_list_index = key_index.count_list_index;
+		let prev_count_list = self.count_lists.get_mut(prev_count_list_index).unwrap();
+		let prev_count = prev_count_list.count;
 
-				let new_index = self.counts[count as usize].push_front(key.clone());
-				self.index_map.insert(key.clone(), new_index);
+		prev_count_list.remove(key_index.list_index);
+		let prev_is_empty = prev_count_list.is_empty();
+
+		if let Some(next_count_list_index) = self.count_lists.get_next_index(prev_count_list_index) {
+			let next_count_list = self.count_lists.get_mut(next_count_list_index).unwrap();
+
+			if next_count_list.count == prev_count + 1 {
+				let list_index = next_count_list.push(key.clone());
+
+				self.index_map.insert(key.clone(), KeyIndex::new(
+					next_count_list_index,
+					list_index
+				));
+
+				if prev_is_empty {
+					self.count_lists.remove(prev_count_list_index);
+				}
+
+				return;
 			}
+		}
+
+		let mut count_list = CountList::<K>::new(prev_count + 1);
+
+		let list_index = count_list.push(key.clone());
+		let count_list_index = self.count_lists.insert_after(prev_count_list_index, count_list);
+
+		self.index_map.insert(key.clone(), KeyIndex::new(
+			count_list_index,
+			list_index
+		));
+
+		if prev_is_empty {
+			self.count_lists.remove(prev_count_list_index);
 		}
 	}
 
 	fn remove(&mut self, key: &K) {
-		if let (Some(count), Some(index)) = (
-			self.count_map.get(key),
-			self.index_map.get(key),
-		) {
-			self.counts[*count as usize].remove(*index);
-		}
+		let Some(key_index) = self.index_map.remove(key) else {
+			return;
+		};
 
-		self.count_map.remove(key);
-		self.index_map.remove(key);
+		let count_list = self.count_lists.get_mut(key_index.count_list_index).unwrap();
+
+		count_list.remove(key_index.list_index);
+
+		if count_list.is_empty() {
+			self.count_lists.remove(key_index.count_list_index);
+		}
 	}
 
 	fn clear(&mut self) {
-		self.count_map.clear();
 		self.index_map.clear();
-
-		self.counts.clear();
+		self.count_lists.clear();
 	}
 
 	fn get_eviction(&mut self) -> Option<K> {
-		let mut count_index: usize = 0;
+		let Some(count_list_index) = self.count_lists.front_index() else {
+			return None;
+		};
 
-		while count_index < self.counts.len() {
-			if let Some(key) = self.counts[count_index].pop_back() {
-				self.count_map.remove(&key);
-				self.index_map.remove(&key);
+		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
 
-				return Some(key);
-			}
+		let key = count_list.pop();
+		self.index_map.remove(&key);
 
-			count_index += 1;
+		if count_list.is_empty() {
+			self.count_lists.remove(count_list_index);
 		}
 
-		None
+		Some(key)
 	}
 }
 
-impl<K> LfuStack<K>
-where
-	K: Eq + Hash + Clone,
-{
-	fn init_counts(&mut self, min_count: u64) {
-		while self.counts.len() <= min_count as usize {
-			self.counts.push(VecList::new());
+impl<K> CountList<K> {
+	fn new(count: u64) -> Self {
+		CountList {
+			count,
+			list: VecList::new(),
+		}
+	}
+
+	fn is_empty(&self) -> bool {
+		self.list.is_empty()
+	}
+
+	fn push(&mut self, key: K) -> Index<K> {
+		self.list.push_front(key)
+	}
+
+	fn pop(&mut self) -> K {
+		self.list.pop_back().unwrap()
+	}
+
+	fn remove(&mut self, index: Index<K>) {
+		self.list.remove(index).unwrap();
+	}
+}
+
+impl<K> KeyIndex<K> {
+	fn new(
+		count_list_index: Index<CountList<K>>,
+		list_index: Index<K>,
+	) -> Self {
+		KeyIndex {
+			count_list_index,
+			list_index,
 		}
 	}
 }
