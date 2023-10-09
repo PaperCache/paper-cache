@@ -123,7 +123,7 @@ where
 	}
 
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
-		let object = Object::new(value, ttl);
+		let object = Object::new(value, ttl, &self.policies);
 		let size = object.get_size();
 
 		if size == 0 {
