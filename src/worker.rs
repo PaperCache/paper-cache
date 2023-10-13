@@ -11,8 +11,6 @@ use crate::{
 	cache::Cache,
 };
 
-pub const TIME_INCREMENT: u64 = 500;
-
 pub trait Worker<K, V>
 where
 	Self: 'static + Send,

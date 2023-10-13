@@ -9,7 +9,7 @@ use std::{
 use crate::{
 	object::MemSize,
 	cache::Cache,
-	worker::{Worker, TIME_INCREMENT},
+	worker::Worker,
 };
 
 pub struct TtlWorker<K, V>
@@ -33,7 +33,7 @@ where
 
 	fn start(&self) {
 		loop {
-			thread::sleep(Duration::from_millis(TIME_INCREMENT));
+			thread::sleep(Duration::from_millis(500));
 
 			let mut cache = self.cache.lock().unwrap();
 			cache.prune_expired();
