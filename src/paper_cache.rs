@@ -116,13 +116,13 @@ where
 	/// }
 	/// ```
 	pub fn stats(&self) -> Stats {
-		let cache = self.cache.lock().unwrap();
-		cache.stats()
+		self.cache
+			.lock().unwrap()
+			.stats()
 	}
 
 	/// Gets the value associated with the supplied key.
-	/// If the key was not found in the cache, returns a
-	/// [`CacheError`].
+	/// If the key was not found in the cache, returns a [`CacheError`].
 	///
 	/// # Examples
 	/// ```
@@ -145,8 +145,9 @@ where
 	/// }
 	/// ```
 	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.get(key)
+		self.cache
+			.lock().unwrap()
+			.get(key)
 	}
 
 	/// Sets the supplied key and value in the cache.
@@ -172,8 +173,9 @@ where
 	/// }
 	/// ```
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.set(key, value, ttl)
+		self.cache
+			.lock().unwrap()
+			.set(key, value, ttl)
 	}
 
 	/// Deletes the object associated with the supplied key in the cache.
@@ -199,8 +201,46 @@ where
 	/// }
 	/// ```
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.del(key)
+		self.cache
+			.lock().unwrap()
+			.del(key)
+	}
+
+	/// Gets (peeks) the value associated with the supplied key without altering
+	/// any of the cache's internal queues.
+	/// If the key was not found in the cache, returns a [`CacheError`].
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{PaperCache, ObjectMemSize};
+	///
+	/// let mut cache = PaperCache::<u32, Object>::new(8, None).unwrap();
+	///
+	/// cache.set(0, Object, None);
+	/// cache.set(1, Object, None);
+	///
+	/// // Peeking a key which exists in the cache will return the associated value.
+	/// assert!(cache.peek(&0).is_ok());
+	/// // Peeking a key which does not exist in the cache will return a CacheError.
+	/// assert!(cache.peek(&2).is_err());
+	///
+	/// cache.set(2, Object, None);
+	///
+	/// // Peeking a key will not alter the eviction order of the objects.
+	/// assert!(cache.peek(&1).is_ok());
+	/// assert!(cache.peek(&2).is_ok());
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
+	/// ```
+	pub fn peek(&self, key: &K) -> Result<V, CacheError> {
+		self.cache
+			.lock().unwrap()
+			.peek(key)
 	}
 
 	/// Deletes all objects in the cache and sets the cache's used size to zero.
@@ -221,8 +261,9 @@ where
 	/// }
 	/// ```
 	pub fn wipe(&mut self) -> Result<(), CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.wipe()
+		self.cache
+			.lock().unwrap()
+			.wipe()
 	}
 
 	/// Resizes the cache to the supplied maximum size.
@@ -247,8 +288,9 @@ where
 	/// }
 	/// ```
 	pub fn resize(&mut self, max_size: CacheSize) -> Result<(), CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.resize(max_size)
+		self.cache
+			.lock().unwrap()
+			.resize(max_size)
 	}
 
 	/// Sets the eviction policy of the cache to the supplied policy.
@@ -274,8 +316,9 @@ where
 	/// }
 	/// ```
 	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
-		let mut cache = self.cache.lock().unwrap();
-		cache.policy(policy)
+		self.cache
+			.lock().unwrap()
+			.policy(policy)
 	}
 
 	/// Registers a new background worker which implements [`Worker`].

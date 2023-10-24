@@ -181,6 +181,15 @@ where
 		}
 	}
 
+	pub fn peek(&self, key: &K) -> Result<V, CacheError> {
+		self.objects.get(key)
+			.map(|object| object.get_data().clone())
+			.ok_or(CacheError::new(
+				ErrorKind::KeyNotFound,
+				"The key was not found in the cache."
+			))
+	}
+
 	pub fn wipe(&mut self) -> Result<(), CacheError> {
 		self.objects.clear();
 		self.expiries.clear();
