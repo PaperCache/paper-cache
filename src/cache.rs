@@ -181,6 +181,10 @@ where
 		}
 	}
 
+	pub fn has(&self, key: &K) -> bool {
+		self.objects.contains_key(key)
+	}
+
 	pub fn peek(&self, key: &K) -> Result<V, CacheError> {
 		self.objects.get(key)
 			.map(|object| object.get_data().clone())

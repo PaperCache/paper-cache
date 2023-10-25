@@ -206,6 +206,33 @@ where
 			.del(key)
 	}
 
+	/// Checks if an object with the supplied key exists in the cache without
+	/// altering any of the cache's internal queues.
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{PaperCache, ObjectMemSize};
+	///
+	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	///
+	/// cache.set(0, Object, None);
+	///
+	/// assert!(cache.has(&0));
+	/// assert!(!cache.has(&1));
+	///
+	/// #[derive(Clone)]
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
+	/// ```
+	pub fn has(&self, key: &K) -> bool {
+		self.cache
+			.lock().unwrap()
+			.has(key)
+	}
+
 	/// Gets (peeks) the value associated with the supplied key without altering
 	/// any of the cache's internal queues.
 	/// If the key was not found in the cache, returns a [`CacheError`].
