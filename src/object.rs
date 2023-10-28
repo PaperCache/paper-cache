@@ -1,7 +1,11 @@
+use std::rc::Rc;
 use kwik::utils;
 
-pub struct Object<T: MemSize> {
-	data: T,
+pub struct Object<T>
+where
+	T: MemSize,
+{
+	data: Rc<T>,
 	expiry: Option<u64>,
 }
 
@@ -9,7 +13,10 @@ pub trait MemSize {
 	fn mem_size(&self) -> usize;
 }
 
-impl<T: MemSize> Object<T> {
+impl<T> Object<T>
+where
+	T: MemSize,
+{
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
 		let expiry = match ttl {
 			Some(0) | None => None,
@@ -21,12 +28,12 @@ impl<T: MemSize> Object<T> {
 		};
 
 		Object {
-			data,
+			data: Rc::new(data),
 			expiry,
 		}
 	}
 
-	pub fn get_data(&self) -> &T {
+	pub fn get_data(&self) -> &Rc<T> {
 		&self.data
 	}
 

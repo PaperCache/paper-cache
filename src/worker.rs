@@ -14,7 +14,7 @@ pub trait Worker<K, V>
 where
 	Self: 'static + Send,
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {
 	fn new(_: Arc<Mutex<Cache<K, V>>>) -> Self where Self: Sized;
 	fn start(&self);

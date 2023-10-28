@@ -26,7 +26,7 @@ pub type CacheSize = u64;
 pub struct Cache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {
 	stats: Stats,
 
@@ -41,7 +41,7 @@ where
 impl<K, V> Cache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {
 	pub fn new(
 		max_size: CacheSize,
@@ -99,7 +99,7 @@ where
 		self.stats
 	}
 
-	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
+	pub fn get(&mut self, key: &K) -> Result<Rc<V>, CacheError> {
 		match self.objects.get_key_value(key) {
 			Some((key, object)) => {
 				self.stats.hit();
@@ -108,7 +108,7 @@ where
 					self.policy_stacks[policy.index()].update(key);
 				}
 
-				Ok(object.get_data().clone())
+				Ok(Rc::clone(object.get_data()))
 			},
 
 			None => {
@@ -178,9 +178,9 @@ where
 		self.objects.contains_key(key)
 	}
 
-	pub fn peek(&self, key: &K) -> Result<V, CacheError> {
+	pub fn peek(&self, key: &K) -> Result<Rc<V>, CacheError> {
 		self.objects.get(key)
-			.map(|object| object.get_data().clone())
+			.map(|object| Rc::clone(object.get_data()))
 			.ok_or(CacheError::new(
 				ErrorKind::KeyNotFound,
 				"The key was not found in the cache."
@@ -283,5 +283,5 @@ where
 unsafe impl<K, V> Send for Cache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {}

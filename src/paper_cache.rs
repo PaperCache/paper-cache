@@ -1,4 +1,5 @@
 use std::{
+	rc::Rc,
 	sync::{Arc, Mutex},
 	hash::Hash,
 	thread,
@@ -18,7 +19,7 @@ pub use crate::cache::CacheSize;
 pub struct PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
 }
@@ -26,7 +27,7 @@ where
 impl<K, V> PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
@@ -51,7 +52,6 @@ where
 	/// // Supplying an empty policies slice will return a CacheError.
 	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![])).is_err());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -84,7 +84,6 @@ where
 	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	/// assert_eq!(cache.version(), "0.1.0");
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -107,7 +106,6 @@ where
 	///
 	/// assert_eq!(cache.stats().get_used_size(), 4);
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -136,14 +134,13 @@ where
 	/// // Getting a key which does not exist in the cache will return a CacheError.
 	/// assert!(cache.get(&1).is_err());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn get(&mut self, key: &K) -> Result<V, CacheError> {
+	pub fn get(&mut self, key: &K) -> Result<Rc<V>, CacheError> {
 		self.cache
 			.lock().unwrap()
 			.get(key)
@@ -164,7 +161,6 @@ where
 	///
 	/// assert!(cache.set(0, Object, None).is_ok());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -192,7 +188,6 @@ where
 	/// // Deleting a key which does not exist in the cache will return a CacheError.
 	/// assert!(cache.del(&1).is_err());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -219,7 +214,6 @@ where
 	/// assert!(cache.has(&0));
 	/// assert!(!cache.has(&1));
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -256,14 +250,13 @@ where
 	/// assert!(cache.peek(&1).is_ok());
 	/// assert!(cache.peek(&2).is_ok());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn peek(&self, key: &K) -> Result<V, CacheError> {
+	pub fn peek(&self, key: &K) -> Result<Rc<V>, CacheError> {
 		self.cache
 			.lock().unwrap()
 			.peek(key)
@@ -279,7 +272,6 @@ where
 	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
 	/// cache.wipe();
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -306,7 +298,6 @@ where
 	/// // Resizing to a size of zero will return a CacheError.
 	/// assert!(cache.resize(0).is_err());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -334,7 +325,6 @@ where
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
 	/// assert!(cache.policy(Policy::Mru).is_err());
 	///
-	/// #[derive(Clone)]
 	/// struct Object;
 	///
 	/// impl ObjectMemSize for Object {
@@ -362,5 +352,5 @@ where
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
-	V: 'static + Clone + Sync + MemSize,
+	V: 'static + Sync + MemSize,
 {}
