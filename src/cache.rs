@@ -1,6 +1,5 @@
 use std::{
 	rc::Rc,
-	fmt::Display,
 	hash::Hash,
 	collections::HashMap,
 };
@@ -26,7 +25,7 @@ pub type CacheSize = u64;
 
 pub struct Cache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	stats: Stats,
@@ -41,7 +40,7 @@ where
 
 impl<K, V> Cache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	pub fn new(
@@ -283,6 +282,6 @@ where
 
 unsafe impl<K, V> Send for Cache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {}

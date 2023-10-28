@@ -2,7 +2,6 @@ mod ttl;
 
 use std::{
 	sync::{Arc, Mutex},
-	fmt::Display,
 	hash::Hash,
 };
 
@@ -14,7 +13,7 @@ use crate::{
 pub trait Worker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	fn new(_: Arc<Mutex<Cache<K, V>>>) -> Self where Self: Sized;

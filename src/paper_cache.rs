@@ -1,6 +1,5 @@
 use std::{
 	sync::{Arc, Mutex},
-	fmt::Display,
 	hash::Hash,
 	thread,
 };
@@ -18,7 +17,7 @@ pub use crate::cache::CacheSize;
 
 pub struct PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
@@ -26,7 +25,7 @@ where
 
 impl<K, V> PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	/// Creates an empty PaperCache with maximum size `max_size`.
@@ -362,6 +361,6 @@ where
 
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {}

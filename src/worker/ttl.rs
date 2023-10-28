@@ -1,6 +1,5 @@
 use std::{
 	sync::{Arc, Mutex},
-	fmt::Display,
 	hash::Hash,
 	thread,
 	time::Duration,
@@ -14,7 +13,7 @@ use crate::{
 
 pub struct TtlWorker<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	cache: Arc<Mutex<Cache<K, V>>>,
@@ -22,7 +21,7 @@ where
 
 impl<K, V> Worker<K, V> for TtlWorker<K, V>
 where
-	K: 'static + Eq + Hash + Display + Sync,
+	K: 'static + Eq + Hash + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	fn new(cache: Arc<Mutex<Cache<K, V>>>) -> Self {
