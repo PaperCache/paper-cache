@@ -160,17 +160,9 @@ where
 	}
 
 	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
-		match self.objects.remove(key) {
-			Some(object) => {
+		match self.erase(key) {
+			Some(_) => {
 				self.stats.del();
-				self.stats.decrease_used_size(object.get_size());
-
-				for policy in &self.policies {
-					self.policy_stacks[policy.index()].remove(key);
-				}
-
-				self.expiries.remove(key, object.get_expiry());
-
 				Ok(())
 			},
 
@@ -242,7 +234,7 @@ where
 			].get_eviction();
 
 			if let Some(key) = &policy_key {
-				if self.del(key).is_err() {
+				if self.erase(key).is_none() {
 					return Err(CacheError::new(
 						ErrorKind::Internal,
 						"An internal error has occured."
@@ -265,9 +257,25 @@ where
 
 		while let Some(expired) = self.expiries.expired(now) {
 			for key in expired {
-				let _ = self.del(&key);
+				let _ = self.erase(&key);
 			}
 		}
+	}
+
+	fn erase(&mut self, key: &K) -> Option<Object<V>> {
+		let Some(object) = self.objects.remove(key) else {
+			return None;
+		};
+
+		self.stats.decrease_used_size(object.get_size());
+
+		for policy in &self.policies {
+			self.policy_stacks[policy.index()].remove(key);
+		}
+
+		self.expiries.remove(key, object.get_expiry());
+
+		Some(object)
 	}
 }
 
