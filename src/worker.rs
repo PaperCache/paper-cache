@@ -14,7 +14,7 @@ use crate::{
 pub trait Worker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Eq + Hash + Clone + Display + Sync,
+	K: 'static + Eq + Hash + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	fn new(_: Arc<Mutex<Cache<K, V>>>) -> Self where Self: Sized;

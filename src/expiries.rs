@@ -1,22 +1,29 @@
 use std::{
+	rc::Rc,
 	hash::Hash,
 	collections::BTreeMap,
 };
 
 use rustc_hash::FxHashSet;
 
-pub struct Expiries<T: Eq + Hash> {
-	map: BTreeMap<u64, FxHashSet<T>>,
+pub struct Expiries<K>
+where
+	K: Eq + Hash,
+{
+	map: BTreeMap<u64, FxHashSet<Rc<K>>>,
 }
 
-impl<T: Eq + Hash + Clone> Expiries<T> {
+impl<K> Expiries<K>
+where
+	K: Eq + Hash,
+{
 	pub fn new() -> Self {
 		Expiries {
 			map: BTreeMap::new(),
 		}
 	}
 
-	pub fn insert(&mut self, key: &T, expiry: Option<u64>) {
+	pub fn insert(&mut self, key: &Rc<K>, expiry: Option<u64>) {
 		let expiry = match expiry {
 			Some(expiry) => expiry,
 			None => return,
@@ -24,19 +31,19 @@ impl<T: Eq + Hash + Clone> Expiries<T> {
 
 		match self.map.get_mut(&expiry) {
 			Some(keys) => {
-				keys.insert(key.clone());
+				keys.insert(Rc::clone(key));
 			},
 
 			None => {
 				let mut keys = FxHashSet::default();
-				keys.insert(key.clone());
+				keys.insert(Rc::clone(key));
 
 				self.map.insert(expiry, keys);
 			},
 		}
 	}
 
-	pub fn remove(&mut self, key: &T, expiry: Option<u64>) {
+	pub fn remove(&mut self, key: &K, expiry: Option<u64>) {
 		let expiry = match expiry {
 			Some(expiry) => expiry,
 			None => return,
@@ -53,7 +60,7 @@ impl<T: Eq + Hash + Clone> Expiries<T> {
 		}
 	}
 
-	pub fn expired(&mut self, now: u64) -> Option<FxHashSet<T>> {
+	pub fn expired(&mut self, now: u64) -> Option<FxHashSet<Rc<K>>> {
 		let first_expiry = match self.map.first_key_value() {
 			Some((expiry, _)) => expiry,
 

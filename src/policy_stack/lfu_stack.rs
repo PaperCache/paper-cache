@@ -1,14 +1,18 @@
-use std::hash::Hash;
+use std::{
+	rc::Rc,
+	hash::Hash,
+};
+
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
 use crate::policy_stack::PolicyStack;
 
 pub struct LfuStack<K>
 where
-	K: Eq + Hash + Clone,
+	K: Eq + Hash,
 {
-	index_map: FxHashMap<K, KeyIndex<K>>,
-	count_lists: VecList<CountList<K>>,
+	index_map: FxHashMap<Rc<K>, KeyIndex<Rc<K>>>,
+	count_lists: VecList<CountList<Rc<K>>>,
 }
 
 struct CountList<K> {
@@ -23,7 +27,7 @@ struct KeyIndex<K> {
 
 impl<K> PolicyStack<K> for LfuStack<K>
 where
-	K: Eq + Hash + Clone,
+	K: Eq + Hash,
 {
 	fn new() -> Self {
 		LfuStack {
@@ -32,7 +36,7 @@ where
 		}
 	}
 
-	fn insert(&mut self, key: &K) {
+	fn insert(&mut self, key: &Rc<K>) {
 		if self.index_map.contains_key(key) {
 			return self.update(key);
 		}
@@ -44,15 +48,15 @@ where
 		let count_list_index = self.count_lists.front_index().unwrap();
 		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
 
-		let list_index = count_list.push(key.clone());
+		let list_index = count_list.push(Rc::clone(key));
 
-		self.index_map.insert(key.clone(), KeyIndex::new(
+		self.index_map.insert(Rc::clone(key), KeyIndex::new(
 			count_list_index,
 			list_index
 		));
 	}
 
-	fn update(&mut self, key: &K) {
+	fn update(&mut self, key: &Rc<K>) {
 		let Some(key_index) = self.index_map.get(key) else {
 			return;
 		};
@@ -68,9 +72,9 @@ where
 			let next_count_list = self.count_lists.get_mut(next_count_list_index).unwrap();
 
 			if next_count_list.count == prev_count + 1 {
-				let list_index = next_count_list.push(key.clone());
+				let list_index = next_count_list.push(Rc::clone(key));
 
-				self.index_map.insert(key.clone(), KeyIndex::new(
+				self.index_map.insert(Rc::clone(key), KeyIndex::new(
 					next_count_list_index,
 					list_index
 				));
@@ -83,12 +87,12 @@ where
 			}
 		}
 
-		let mut count_list = CountList::<K>::new(prev_count + 1);
+		let mut count_list = CountList::<Rc<K>>::new(prev_count + 1);
 
-		let list_index = count_list.push(key.clone());
+		let list_index = count_list.push(Rc::clone(key));
 		let count_list_index = self.count_lists.insert_after(prev_count_list_index, count_list);
 
-		self.index_map.insert(key.clone(), KeyIndex::new(
+		self.index_map.insert(Rc::clone(key), KeyIndex::new(
 			count_list_index,
 			list_index
 		));
@@ -117,7 +121,7 @@ where
 		self.count_lists.clear();
 	}
 
-	fn get_eviction(&mut self) -> Option<K> {
+	fn get_eviction(&mut self) -> Option<Rc<K>> {
 		let Some(count_list_index) = self.count_lists.front_index() else {
 			return None;
 		};
@@ -176,6 +180,7 @@ impl<K> KeyIndex<K> {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
+		use std::rc::Rc;
 		use crate::policy_stack::{PolicyStack, LfuStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
@@ -184,14 +189,14 @@ mod tests {
 		let mut stack = LfuStack::<u32>::new();
 
 		for access in &accesses {
-			stack.insert(access);
+			stack.insert(&Rc::new(*access));
 		}
 
 		let mut eviction_count = 0;
 
 		while let Some(key) = stack.get_eviction() {
 			match evictions.pop() {
-				Some(eviction) => assert_eq!(key, eviction),
+				Some(eviction) => assert_eq!(key, Rc::new(eviction)),
 				None => assert!(false),
 			}
 

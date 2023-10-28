@@ -1,19 +1,23 @@
-use std::hash::Hash;
+use std::{
+	rc::Rc,
+	hash::Hash,
+};
+
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
 use crate::policy_stack::PolicyStack;
 
 pub struct FifoStack<K>
 where
-	K: Eq + Hash + Clone,
+	K: Eq + Hash,
 {
-	map: FxHashMap<K, Index<K>>,
-	stack: VecList<K>,
+	map: FxHashMap<Rc<K>, Index<Rc<K>>>,
+	stack: VecList<Rc<K>>,
 }
 
 impl<K> PolicyStack<K> for FifoStack<K>
 where
-	K: Eq + Hash + Clone,
+	K: Eq + Hash,
 {
 	fn new() -> Self {
 		FifoStack {
@@ -22,13 +26,13 @@ where
 		}
 	}
 
-	fn insert(&mut self, key: &K) {
+	fn insert(&mut self, key: &Rc<K>) {
 		if self.map.contains_key(key) {
 			return self.update(key);
 		}
 
-		let index = self.stack.push_front(key.clone());
-		self.map.insert(key.clone(), index);
+		let index = self.stack.push_front(Rc::clone(key));
+		self.map.insert(Rc::clone(key), index);
 	}
 
 	fn remove(&mut self, key: &K) {
@@ -42,7 +46,7 @@ where
 		self.stack.clear();
 	}
 
-	fn get_eviction(&mut self) -> Option<K> {
+	fn get_eviction(&mut self) -> Option<Rc<K>> {
 		let evict_key = self.stack.pop_back();
 
 		if let Some(key) = &evict_key {
@@ -57,6 +61,7 @@ where
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
+		use std::rc::Rc;
 		use crate::policy_stack::{PolicyStack, FifoStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
@@ -65,14 +70,14 @@ mod tests {
 		let mut stack = FifoStack::<u32>::new();
 
 		for access in &accesses {
-			stack.insert(access);
+			stack.insert(&Rc::new(*access));
 		}
 
 		let mut eviction_count = 0;
 
 		while let Some(key) = stack.get_eviction() {
 			match evictions.pop() {
-				Some(eviction) => assert_eq!(key, eviction),
+				Some(eviction) => assert_eq!(key, Rc::new(eviction)),
 				None => assert!(false),
 			}
 

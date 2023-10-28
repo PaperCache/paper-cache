@@ -1,4 +1,5 @@
 use std::{
+	rc::Rc,
 	fmt::Display,
 	hash::Hash,
 	collections::HashMap,
@@ -25,7 +26,7 @@ pub type CacheSize = u64;
 
 pub struct Cache<K, V>
 where
-	K: 'static + Eq + Hash + Clone + Display + Sync,
+	K: 'static + Eq + Hash + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	stats: Stats,
@@ -35,12 +36,12 @@ where
 
 	expiries: Expiries<K>,
 
-	objects: HashMap<K, Object<V>>,
+	objects: HashMap<Rc<K>, Object<V>>,
 }
 
 impl<K, V> Cache<K, V>
 where
-	K: 'static + Eq + Hash + Clone + Display + Sync,
+	K: 'static + Eq + Hash + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {
 	pub fn new(
@@ -123,6 +124,7 @@ where
 	}
 
 	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
+		let key = Rc::new(key);
 		let object = Object::new(value, ttl);
 		let size = object.get_size();
 
@@ -281,6 +283,6 @@ where
 
 unsafe impl<K, V> Send for Cache<K, V>
 where
-	K: 'static + Eq + Hash + Clone + Display + Sync,
+	K: 'static + Eq + Hash + Display + Sync,
 	V: 'static + Clone + Sync + MemSize,
 {}
