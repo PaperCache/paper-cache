@@ -4,10 +4,10 @@ use std::{
 	collections::HashMap,
 };
 
+use thiserror::Error;
 use kwik::utils;
 
 use crate::{
-	cache_error::{CacheError, ErrorKind},
 	stats::Stats,
 	object::{Object, MemSize},
 	policy::Policy,
@@ -38,6 +38,30 @@ where
 	objects: HashMap<Rc<K>, Object<V>>,
 }
 
+#[derive(Debug, Error)]
+pub enum CacheError {
+	#[error("The policies cannot be empty.")]
+	EmptyPolicies,
+
+	#[error("The supplied policy is not one of the cache's configured policies.")]
+	UnconfiguredPolicy,
+
+	#[error("The key was not found in the cache.")]
+	KeyNotFound,
+
+	#[error("The value size cannot be zero.")]
+	ZeroValueSize,
+
+	#[error("The value size cannot exceed the cache size.")]
+	ExceedingValueSize,
+
+	#[error("The cache size cannot be zero.")]
+	ZeroCacheSize,
+
+	#[error("Internal error.")]
+	Internal,
+}
+
 impl<K, V> Cache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
@@ -48,19 +72,13 @@ where
 		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidCacheSize,
-				"The cache size cannot be zero."
-			));
+			return Err(CacheError::ZeroCacheSize);
 		}
 
 		let policies = match policies {
 			Some(policies) => {
 				if policies.is_empty() {
-					return Err(CacheError::new(
-						ErrorKind::InvalidPolicies,
-						"Invalid policies."
-					));
+					return Err(CacheError::EmptyPolicies);
 				}
 
 				policies
@@ -113,11 +131,7 @@ where
 
 			None => {
 				self.stats.miss();
-
-				Err(CacheError::new(
-					ErrorKind::KeyNotFound,
-					"The key was not found in the cache."
-				))
+				Err(CacheError::KeyNotFound)
 			},
 		}
 	}
@@ -128,17 +142,11 @@ where
 		let size = object.get_size();
 
 		if size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidValueSize,
-				"The value size cannot be zero."
-			));
+			return Err(CacheError::ZeroValueSize);
 		}
 
 		if self.stats.exceeds_max_size(size) {
-			return Err(CacheError::new(
-				ErrorKind::InvalidValueSize,
-				"The value size cannot be larger than the cache size."
-			));
+			return Err(CacheError::ExceedingValueSize);
 		}
 
 		self.stats.set();
@@ -167,10 +175,7 @@ where
 				Ok(())
 			},
 
-			None => Err(CacheError::new(
-				ErrorKind::KeyNotFound,
-				"The key was not found in the cache."
-			)),
+			None => Err(CacheError::KeyNotFound),
 		}
 	}
 
@@ -181,10 +186,7 @@ where
 	pub fn peek(&self, key: &K) -> Result<Rc<V>, CacheError> {
 		self.objects.get(key)
 			.map(|object| Rc::clone(object.get_data()))
-			.ok_or(CacheError::new(
-				ErrorKind::KeyNotFound,
-				"The key was not found in the cache."
-			))
+			.ok_or(CacheError::KeyNotFound)
 	}
 
 	pub fn wipe(&mut self) -> Result<(), CacheError> {
@@ -202,10 +204,7 @@ where
 
 	pub fn resize(&mut self, max_size: CacheSize) -> Result<(), CacheError> {
 		if max_size == 0 {
-			return Err(CacheError::new(
-				ErrorKind::InvalidCacheSize,
-				"The cache size cannot be zero."
-			));
+			return Err(CacheError::ZeroCacheSize);
 		}
 
 		self.reduce(max_size)?;
@@ -216,10 +215,7 @@ where
 
 	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
 		if !self.policies.contains(&policy) {
-			return Err(CacheError::new(
-				ErrorKind::InvalidPolicy,
-				"The supplied policy is not one of the cache's considered policies."
-			));
+			return Err(CacheError::UnconfiguredPolicy);
 		}
 
 		self.stats.set_policy(policy.to_owned());
@@ -236,16 +232,10 @@ where
 
 			if let Some(key) = &policy_key {
 				if self.erase(key).is_none() {
-					return Err(CacheError::new(
-						ErrorKind::Internal,
-						"An internal error has occured."
-					));
+					return Err(CacheError::Internal);
 				}
 			} else {
-				return Err(CacheError::new(
-					ErrorKind::Internal,
-					"An internal error has occured."
-				));
+				return Err(CacheError::Internal);
 			}
 		}
 
@@ -264,9 +254,7 @@ where
 	}
 
 	fn erase(&mut self, key: &K) -> Option<Object<V>> {
-		let Some(object) = self.objects.remove(key) else {
-			return None;
-		};
+		let object = self.objects.remove(key)?;
 
 		self.stats.decrease_used_size(object.get_size());
 

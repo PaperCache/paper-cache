@@ -6,11 +6,10 @@ use std::{
 };
 
 use crate::{
-	cache_error::CacheError,
 	object::MemSize,
 	stats::Stats,
 	policy::Policy,
-	cache::Cache,
+	cache::{Cache, CacheError},
 	worker::{Worker, TtlWorker},
 };
 

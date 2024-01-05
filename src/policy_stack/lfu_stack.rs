@@ -122,11 +122,8 @@ where
 	}
 
 	fn get_eviction(&mut self) -> Option<Rc<K>> {
-		let Some(count_list_index) = self.count_lists.front_index() else {
-			return None;
-		};
-
-		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
+		let count_list_index = self.count_lists.front_index()?;
+		let count_list = self.count_lists.get_mut(count_list_index)?;
 
 		let key = count_list.pop();
 		self.index_map.remove(&key);

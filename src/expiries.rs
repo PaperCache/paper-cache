@@ -44,9 +44,8 @@ where
 	}
 
 	pub fn remove(&mut self, key: &K, expiry: Option<u64>) {
-		let expiry = match expiry {
-			Some(expiry) => expiry,
-			None => return,
+		let Some(expiry) = expiry else {
+			return;
 		};
 
 		match self.map.get_mut(&expiry) {
@@ -61,13 +60,9 @@ where
 	}
 
 	pub fn expired(&mut self, now: u64) -> Option<FxHashSet<Rc<K>>> {
-		let first_expiry = match self.map.first_key_value() {
-			Some((expiry, _)) => expiry,
-
-			None => {
-				return None;
-			},
-		};
+		let first_expiry = self.map
+			.first_key_value()
+			.map(|(expiry, _)| expiry)?;
 
 		if *first_expiry > now {
 			return None;

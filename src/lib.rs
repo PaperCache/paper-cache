@@ -4,10 +4,9 @@ mod cache;
 mod expiries;
 mod worker;
 mod paper_cache;
-pub use crate::paper_cache::*;
 
-pub mod cache_error;
-pub use crate::cache_error::*;
+pub use crate::paper_cache::*;
+pub use crate::cache::CacheError;
 
 pub mod stats;
 pub use crate::stats::*;
