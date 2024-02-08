@@ -14,16 +14,6 @@ pub enum Policy {
 
 impl Policy {
 	#[must_use]
-	pub fn index(&self) -> usize {
-		match self {
-			Policy::Lfu => 0,
-			Policy::Fifo => 1,
-			Policy::Lru => 2,
-			Policy::Mru => 3,
-		}
-	}
-
-	#[must_use]
 	pub fn as_policy_type<K>(&self) -> PolicyType<K>
 	where
 		K: Eq + Hash,
