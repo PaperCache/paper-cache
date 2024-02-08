@@ -23,7 +23,7 @@ where
 
 			Some(ttl) => {
 				let now = utils::timestamp();
-				Some(ttl as u64 * 1000 + now)
+				Some(u64::from(ttl) * 1000 + now)
 			},
 		};
 

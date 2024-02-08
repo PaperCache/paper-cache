@@ -5,7 +5,7 @@ use std::{
 
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
-use crate::policy_stack::PolicyStack;
+use crate::policy::policy_stack::PolicyStack;
 
 pub struct MruStack<K>
 where
@@ -19,13 +19,6 @@ impl<K> PolicyStack<K> for MruStack<K>
 where
 	K: Eq + Hash,
 {
-	fn new() -> Self {
-		MruStack {
-			map: FxHashMap::default(),
-			stack: VecList::new(),
-		}
-	}
-
 	fn insert(&mut self, key: &Rc<K>) {
 		if self.map.contains_key(key) {
 			return self.update(key);
@@ -66,17 +59,29 @@ where
 	}
 }
 
+impl<K> Default for MruStack<K>
+where
+	K: Eq + Hash,
+{
+	fn default() -> Self {
+		MruStack {
+			map: FxHashMap::default(),
+			stack: VecList::new(),
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
 		use std::rc::Rc;
-		use crate::policy_stack::{PolicyStack, MruStack};
+		use crate::policy::policy_stack::{PolicyStack, MruStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
 		let mut evictions: Vec<u32> = vec![1, 3, 2, 0];
 
-		let mut stack = MruStack::<u32>::new();
+		let mut stack = MruStack::<u32>::default();
 
 		for access in &accesses {
 			stack.insert(&Rc::new(*access));

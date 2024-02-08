@@ -12,8 +12,6 @@ pub trait PolicyStack<K>
 where
 	K: Eq + Hash,
 {
-	fn new() -> Self where Self: Sized;
-
 	fn insert(&mut self, _: &Rc<K>);
 	fn update(&mut self, _: &Rc<K>) {}
 	fn remove(&mut self, _: &K);
@@ -23,7 +21,7 @@ where
 	fn get_eviction(&mut self) -> Option<Rc<K>>;
 }
 
-pub use crate::policy_stack::{
+pub use crate::policy::policy_stack::{
 	lfu_stack::*,
 	lru_stack::*,
 	mru_stack::*,

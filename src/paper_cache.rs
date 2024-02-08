@@ -28,7 +28,7 @@ where
 	K: 'static + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	/// Creates an empty PaperCache with maximum size `max_size`.
+	/// Creates an empty `PaperCache` with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
 	/// The cache will only consider eviction policies specified
 	/// by `policies` and return an error if the number of supplied
@@ -89,6 +89,7 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
+	#[must_use]
 	pub fn version(&self) -> String {
 		env!("CARGO_PKG_VERSION").to_owned()
 	}

@@ -24,22 +24,17 @@ where
 	}
 
 	pub fn insert(&mut self, key: &Rc<K>, expiry: Option<u64>) {
-		let expiry = match expiry {
-			Some(expiry) => expiry,
-			None => return,
+		let Some(expiry) = expiry else {
+			return;
 		};
 
-		match self.map.get_mut(&expiry) {
-			Some(keys) => {
-				keys.insert(Rc::clone(key));
-			},
+		if let Some(keys) = self.map.get_mut(&expiry) {
+			keys.insert(Rc::clone(key));
+		} else {
+			let mut keys = FxHashSet::default();
+			keys.insert(Rc::clone(key));
 
-			None => {
-				let mut keys = FxHashSet::default();
-				keys.insert(Rc::clone(key));
-
-				self.map.insert(expiry, keys);
-			},
+			self.map.insert(expiry, keys);
 		}
 	}
 

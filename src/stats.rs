@@ -23,6 +23,7 @@ pub struct Stats {
 /// This struct holds the basic statistical information about `PaperCache`.
 impl Stats {
 	/// Creates an empty statistics manager.
+	#[must_use]
 	pub fn new(max_size: CacheSize, policy: Policy) -> Self {
 		Stats {
 			max_size,
@@ -48,6 +49,7 @@ impl Stats {
 	/// let stats = Stats::new(10, Policy::Lru);
 	/// assert_eq!(stats.get_max_size(), 10);
 	/// ```
+	#[must_use]
 	pub fn get_max_size(&self) -> CacheSize {
 		self.max_size
 	}
@@ -67,6 +69,7 @@ impl Stats {
 	/// stats.increase_used_size(10);
 	/// assert_eq!(stats.get_used_size(), 10);
 	/// ```
+	#[must_use]
 	pub fn get_used_size(&self) -> CacheSize {
 		self.used_size
 	}
@@ -85,6 +88,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.get_total_gets(), 1);
 	/// ```
+	#[must_use]
 	pub fn get_total_gets(&self) -> u64 {
 		self.total_gets
 	}
@@ -103,6 +107,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.get_total_sets(), 1);
 	/// ```
+	#[must_use]
 	pub fn get_total_sets(&self) -> u64 {
 		self.total_sets
 	}
@@ -121,6 +126,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.get_total_dels(), 1);
 	/// ```
+	#[must_use]
 	pub fn get_total_dels(&self) -> u64 {
 		self.total_dels
 	}
@@ -145,6 +151,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.get_miss_ratio(), 0.25);
 	/// ```
+	#[must_use]
 	pub fn get_miss_ratio(&self) -> f64 {
 		if self.total_gets == 0 {
 			return 1.0;
@@ -163,6 +170,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.get_policy(), &Policy::Lru);
 	/// ```
+	#[must_use]
 	pub fn get_policy(&self) -> &Policy {
 		&self.policy
 	}
@@ -177,6 +185,7 @@ impl Stats {
 	///
 	/// assert!(stats.get_uptime() >= 0);
 	/// ```
+	#[must_use]
 	pub fn get_uptime(&self) -> u64 {
 		utils::timestamp() - self.start_time
 	}
@@ -352,6 +361,7 @@ impl Stats {
 	/// assert!(stats.exceeds_max_size(15));
 	/// assert!(!stats.exceeds_max_size(5));
 	/// ```
+	#[must_use]
 	pub fn exceeds_max_size(&self, size: u64) -> bool {
 		size > self.max_size
 	}
@@ -369,6 +379,7 @@ impl Stats {
 	/// assert!(stats.used_size_exceeds(5));
 	/// assert!(!stats.used_size_exceeds(15));
 	/// ```
+	#[must_use]
 	pub fn used_size_exceeds(&self, size: u64) -> bool {
 		self.used_size > size
 	}
@@ -384,6 +395,7 @@ impl Stats {
 	///
 	/// assert_eq!(stats.target_used_size_to_fit(2), 8);
 	/// ```
+	#[must_use]
 	pub fn target_used_size_to_fit(&self, size: u64) -> u64 {
 		self.max_size - size
 	}

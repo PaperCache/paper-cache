@@ -10,15 +10,12 @@ use kwik::utils;
 use crate::{
 	stats::Stats,
 	object::{Object, MemSize},
-	policy::Policy,
-	expiries::Expiries,
-	policy_stack::{
+	policy::{
+		Policy,
+		PolicyType,
 		PolicyStack,
-		LfuStack,
-		FifoStack,
-		LruStack,
-		MruStack,
 	},
+	expiries::Expiries,
 };
 
 pub type CacheSize = u64;
@@ -30,9 +27,7 @@ where
 {
 	stats: Stats,
 
-	policies: Vec<Policy>,
-	policy_stacks: Vec<Box<dyn PolicyStack<K>>>,
-
+	policy_stacks: Vec<PolicyType<K>>,
 	expiries: Expiries<K>,
 
 	objects: HashMap<Rc<K>, Object<V>>,
@@ -92,19 +87,15 @@ where
 			],
 		};
 
-		let policy_stacks: Vec::<Box<dyn PolicyStack<K>>> = vec![
-			Box::new(LfuStack::<K>::new()),
-			Box::new(FifoStack::<K>::new()),
-			Box::new(LruStack::<K>::new()),
-			Box::new(MruStack::<K>::new()),
-		];
+		let policy_stacks: Vec<PolicyType<K>> = policies
+			.iter()
+			.map(|policy| policy.as_policy_type())
+			.collect::<Vec<PolicyType<K>>>();
 
 		let cache = Cache {
-			stats: Stats::new(max_size, policies[0].to_owned()),
+			stats: Stats::new(max_size, policies[0]),
 
-			policies,
 			policy_stacks,
-
 			expiries: Expiries::new(),
 
 			objects: HashMap::new(),
@@ -113,6 +104,7 @@ where
 		Ok(cache)
 	}
 
+	#[must_use]
 	pub fn stats(&self) -> Stats {
 		self.stats
 	}
@@ -122,8 +114,8 @@ where
 			Some((key, object)) => {
 				self.stats.hit();
 
-				for policy in &self.policies {
-					self.policy_stacks[policy.index()].update(key);
+				for policy_stack in self.policy_stacks.iter_mut() {
+					policy_stack.update(key);
 				}
 
 				Ok(Rc::clone(object.get_data()))
@@ -153,8 +145,8 @@ where
 
 		self.reduce(self.stats.target_used_size_to_fit(size))?;
 
-		for policy in &self.policies {
-			self.policy_stacks[policy.index()].insert(&key);
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.insert(&key);
 		}
 
 		self.expiries.insert(&key, object.get_expiry());
@@ -193,8 +185,8 @@ where
 		self.objects.clear();
 		self.expiries.clear();
 
-		for policy in &self.policies {
-			self.policy_stacks[policy.index()].clear();
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.clear();
 		}
 
 		self.stats.reset_used_size();
@@ -214,21 +206,27 @@ where
 	}
 
 	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
-		if !self.policies.contains(&policy) {
+		if !self.policy_stacks.iter().any(|policy_stack| policy == policy_stack) {
 			return Err(CacheError::UnconfiguredPolicy);
 		}
 
-		self.stats.set_policy(policy.to_owned());
+		self.stats.set_policy(policy);
 
 		Ok(())
 	}
 
 	/// Reduces the cache size to the maximum size.
 	fn reduce(&mut self, target_size: CacheSize) -> Result<(), CacheError> {
+		let policy_index = self.policy_stacks
+			.iter()
+			.position(|policy_stack| self.stats.get_policy() == policy_stack);
+
+		let Some(policy_index) = policy_index else {
+			return Err(CacheError::Internal);
+		};
+
 		while self.stats.used_size_exceeds(target_size) {
-			let policy_key = self.policy_stacks[
-				self.stats.get_policy().index()
-			].get_eviction();
+			let policy_key = self.policy_stacks[policy_index].get_eviction();
 
 			if let Some(key) = &policy_key {
 				if self.erase(key).is_none() {
@@ -258,8 +256,8 @@ where
 
 		self.stats.decrease_used_size(object.get_size());
 
-		for policy in &self.policies {
-			self.policy_stacks[policy.index()].remove(key);
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.remove(key);
 		}
 
 		self.expiries.remove(key, object.get_expiry());
