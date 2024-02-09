@@ -177,7 +177,7 @@ where
 
 	pub fn peek(&self, key: &K) -> Result<Rc<V>, CacheError> {
 		self.objects.get(key)
-			.map(|object| Rc::clone(object.get_data()))
+			.map(|object| object.get_data()).cloned()
 			.ok_or(CacheError::KeyNotFound)
 	}
 
