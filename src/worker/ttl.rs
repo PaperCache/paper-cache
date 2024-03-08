@@ -1,14 +1,15 @@
 use std::{
-	sync::{Arc, Mutex},
 	hash::Hash,
 	thread,
 	time::Duration,
 };
 
+use crossbeam_channel::Receiver;
+
 use crate::{
+	paper_cache::{ObjectMapRef, StatsRef},
 	object::MemSize,
-	cache::Cache,
-	worker::Worker,
+	worker::{Worker, WorkerEvent},
 };
 
 pub struct TtlWorker<K, V>
@@ -16,26 +17,40 @@ where
 	K: 'static + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	cache: Arc<Mutex<Cache<K, V>>>,
+	events: Receiver<WorkerEvent<K>>,
+	objects: ObjectMapRef<K, V>,
 }
 
 impl<K, V> Worker<K, V> for TtlWorker<K, V>
 where
+	Self: 'static + Send,
 	K: 'static + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	fn new(cache: Arc<Mutex<Cache<K, V>>>) -> Self {
+	fn new(
+		events: Receiver<WorkerEvent<K>>,
+		objects: ObjectMapRef<K, V>,
+		_: StatsRef,
+	) -> Self {
 		TtlWorker {
-			cache,
+			objects,
+			events,
 		}
 	}
 
 	fn start(&self) {
 		loop {
-			thread::sleep(Duration::from_millis(500));
+			if let Ok(event) = self.events.try_recv() {
+				// handle event here
+			}
 
-			let mut cache = self.cache.lock().unwrap();
-			cache.prune_expired();
+			thread::sleep(Duration::from_millis(1));
 		}
 	}
 }
+
+unsafe impl<K, V> Send for TtlWorker<K, V>
+where
+	K: 'static + Copy + Eq + Hash + Sync,
+	V: 'static + Sync + MemSize,
+{}

@@ -1,4 +1,5 @@
-use std::{
+/*use std::{
+	sync::atomic::AtomicU64,
 	rc::Rc,
 	hash::Hash,
 	collections::HashMap,
@@ -270,4 +271,4 @@ unsafe impl<K, V> Send for Cache<K, V>
 where
 	K: 'static + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
-{}
+{}*/

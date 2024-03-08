@@ -1,11 +1,11 @@
 use kwik::utils;
 
 use crate::{
-	cache::CacheSize,
+	paper_cache::CacheSize,
 	policy::Policy,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Stats {
 	max_size: CacheSize,
 	used_size: CacheSize,

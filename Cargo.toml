@@ -11,3 +11,5 @@ dlv-list = "0.5.1"
 kwik = { git = "https://github.com/KiaShakiba/kwik-rs.git", version = "0.1.0" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", version = "0.1.0" }
 thiserror = "1.0.56"
+dashmap = "5.5.3"
+crossbeam-channel = "0.5.12"

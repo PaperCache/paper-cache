@@ -1,31 +1,45 @@
 use std::{
-	rc::Rc,
-	sync::{Arc, Mutex},
+	sync::{Arc, RwLock},
 	hash::Hash,
 	thread,
 };
 
-use crate::{
-	object::MemSize,
-	stats::Stats,
-	policy::Policy,
-	cache::{Cache, CacheError},
-	worker::{Worker, TtlWorker},
+use dashmap::DashMap;
+
+use crossbeam_channel::{
+	Sender,
+	Receiver,
+	unbounded
 };
 
-pub use crate::cache::CacheSize;
+use crate::{
+	object::{Object, MemSize},
+	stats::Stats,
+	policy::Policy,
+	error::CacheError,
+	worker::{Worker, WorkerEvent, TtlWorker},
+};
+
+pub type CacheSize = u64;
+
+pub type ObjectMapRef<K, V> = Arc<DashMap<K, Object<V>>>;
+pub type StatsRef = Arc<RwLock<Stats>>;
 
 pub struct PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	cache: Arc<Mutex<Cache<K, V>>>,
+	objects: ObjectMapRef<K, V>,
+	stats: StatsRef,
+
+	worker_sender: Sender<WorkerEvent<K>>,
+	worker_receiver: Receiver<WorkerEvent<K>>,
 }
 
 impl<K, V> PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
 	/// Creates an empty `PaperCache` with maximum size `max_size`.
@@ -61,17 +75,42 @@ where
 		max_size: CacheSize,
 		policies: Option<Vec<Policy>>
 	) -> Result<Self, CacheError> {
-		let cache = Arc::new(Mutex::new(
-			Cache::<K, V>::new(max_size, policies)?
-		));
+		if max_size == 0 {
+			return Err(CacheError::ZeroCacheSize);
+		}
 
-		let paper_cache = PaperCache {
-			cache,
+		let policies = match policies {
+			Some(policies) => {
+				if policies.is_empty() {
+					return Err(CacheError::EmptyPolicies);
+				}
+
+				policies
+			},
+
+			None => vec![
+				Policy::Lfu,
+				Policy::Fifo,
+				Policy::Lru,
+				Policy::Mru,
+			],
 		};
 
-		paper_cache.register_worker::<TtlWorker<K, V>>();
+		let stats = Stats::new(max_size, policies[0]);
 
-		Ok(paper_cache)
+		let (worker_sender, worker_receiver) = unbounded();
+
+		let cache = PaperCache {
+			objects: Arc::new(DashMap::default()),
+			stats: Arc::new(RwLock::new(stats)),
+
+			worker_sender,
+			worker_receiver,
+		};
+
+		cache.register_worker::<TtlWorker<K, V>>();
+
+		Ok(cache)
 	}
 
 	/// Returns the current cache version.
@@ -112,10 +151,12 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn stats(&self) -> Stats {
-		self.cache
-			.lock().unwrap()
-			.stats()
+	pub fn stats(&self) -> Result<Stats, CacheError> {
+		let stats = self.stats
+			.read().map_err(|_| CacheError::Internal)?
+			.clone();
+
+		Ok(stats)
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -130,9 +171,9 @@ where
 	/// cache.set(0, Object, None);
 	///
 	/// // Getting a key which exists in the cache will return the associated value.
-	/// assert!(cache.get(&0).is_ok());
+	/// assert!(cache.get(0).is_ok());
 	/// // Getting a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.get(&1).is_err());
+	/// assert!(cache.get(1).is_err());
 	///
 	/// struct Object;
 	///
@@ -140,10 +181,28 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn get(&mut self, key: &K) -> Result<Rc<V>, CacheError> {
-		self.cache
-			.lock().unwrap()
-			.get(key)
+	pub fn get(&self, key: K) -> Result<Arc<V>, CacheError> {
+		let result = match self.objects.get(&key) {
+			Some(entry) => {
+				self.stats
+					.write().map_err(|_| CacheError::Internal)?
+					.hit();
+
+				Ok(entry.data())
+			},
+
+			None => {
+				self.stats
+					.write().map_err(|_| CacheError::Internal)?
+					.miss();
+
+				Err(CacheError::KeyNotFound)
+			}
+		};
+
+		self.send_to_workers(WorkerEvent::Get(key))?;
+
+		result
 	}
 
 	/// Sets the supplied key and value in the cache.
@@ -167,10 +226,31 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn set(&mut self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
-		self.cache
-			.lock().unwrap()
-			.set(key, value, ttl)
+	pub fn set(&self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
+		let object = Object::new(value, ttl);
+		let size = object.size();
+
+		if size == 0 {
+			return Err(CacheError::ZeroValueSize);
+		}
+
+		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
+
+		if stats.exceeds_max_size(size) {
+			return Err(CacheError::ExceedingValueSize);
+		}
+
+		stats.set();
+
+		if let Some(old_object) = self.objects.insert(key, object) {
+			stats.decrease_used_size(old_object.size());
+		}
+
+		stats.increase_used_size(size);
+
+		self.send_to_workers(WorkerEvent::Set(key, size, ttl))?;
+
+		Ok(())
 	}
 
 	/// Deletes the object associated with the supplied key in the cache.
@@ -194,10 +274,18 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn del(&mut self, key: &K) -> Result<(), CacheError> {
-		self.cache
-			.lock().unwrap()
-			.del(key)
+	pub fn del(&self, key: K) -> Result<(), CacheError> {
+		let result = self.erase(key);
+
+		if result.is_ok() {
+			self.stats
+				.write().map_err(|_| CacheError::Internal)?
+				.del();
+		}
+
+		self.send_to_workers(WorkerEvent::Del(key))?;
+
+		result
 	}
 
 	/// Checks if an object with the supplied key exists in the cache without
@@ -220,10 +308,8 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn has(&self, key: &K) -> bool {
-		self.cache
-			.lock().unwrap()
-			.has(key)
+	pub fn has(&self, key: K) -> bool {
+		self.objects.contains_key(&key)
 	}
 
 	/// Gets (peeks) the value associated with the supplied key without altering
@@ -256,10 +342,10 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn peek(&self, key: &K) -> Result<Rc<V>, CacheError> {
-		self.cache
-			.lock().unwrap()
-			.peek(key)
+	pub fn peek(&self, key: K) -> Result<Arc<V>, CacheError> {
+		self.objects.get(&key)
+			.map(|object| object.data())
+			.ok_or(CacheError::KeyNotFound)
 	}
 
 	/// Deletes all objects in the cache and sets the cache's used size to zero.
@@ -278,10 +364,16 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn wipe(&mut self) -> Result<(), CacheError> {
-		self.cache
-			.lock().unwrap()
-			.wipe()
+	pub fn wipe(&self) -> Result<(), CacheError> {
+		self.objects.clear();
+
+		self.stats
+			.write().map_err(|_| CacheError::Internal)?
+			.reset_used_size();
+
+		self.send_to_workers(WorkerEvent::Wipe)?;
+
+		Ok(())
 	}
 
 	/// Resizes the cache to the supplied maximum size.
@@ -304,10 +396,16 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn resize(&mut self, max_size: CacheSize) -> Result<(), CacheError> {
-		self.cache
-			.lock().unwrap()
-			.resize(max_size)
+	pub fn resize(&self, max_size: CacheSize) -> Result<(), CacheError> {
+		if max_size == 0 {
+			return Err(CacheError::ZeroCacheSize);
+		}
+
+		self.stats
+			.write().map_err(|_| CacheError::Internal)?
+			.set_max_size(max_size);
+
+		Ok(())
 	}
 
 	/// Sets the eviction policy of the cache to the supplied policy.
@@ -331,26 +429,45 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn policy(&mut self, policy: Policy) -> Result<(), CacheError> {
-		self.cache
-			.lock().unwrap()
-			.policy(policy)
+	pub fn policy(&self, policy: Policy) -> Result<(), CacheError> {
+		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
+		stats.set_policy(policy);
+
+		Ok(())
 	}
 
 	/// Registers a new background worker which implements [`Worker`].
-	/// The worker will get a reference to the underlying cache.
-	fn register_worker<T: Worker<K, V>>(&self) {
-		let cache = Arc::clone(&self.cache);
-		let worker = T::new(cache);
+	/// The worker will get an event broadcast channel and references
+	/// to the underlying object map and cache stats.
+	pub fn register_worker<T: Worker<K, V>>(&self) {
+		let worker = T::new(
+			self.worker_receiver.clone(),
+			self.objects.clone(),
+			self.stats.clone(),
+		);
 
-		thread::spawn(move || {
-			worker.start();
-		});
+		thread::spawn(move || worker.start());
+	}
+
+	fn erase(&self, key: K) -> Result<(), CacheError> {
+		let (_, object) = self.objects
+			.remove(&key)
+			.ok_or(CacheError::KeyNotFound)?;
+
+		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
+
+		stats.decrease_used_size(object.size());
+
+		Ok(())
+	}
+
+	fn send_to_workers(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
+		self.worker_sender.send(event).map_err(|_| CacheError::Internal)
 	}
 }
 
 unsafe impl<K, V> Send for PaperCache<K, V>
 where
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {}

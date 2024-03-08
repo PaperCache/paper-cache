@@ -1,11 +1,11 @@
-use std::rc::Rc;
+use std::sync::Arc;
 use kwik::utils;
 
 pub struct Object<T>
 where
 	T: MemSize,
 {
-	data: Rc<T>,
+	data: Arc<T>,
 	expiry: Option<u64>,
 }
 
@@ -28,20 +28,20 @@ where
 		};
 
 		Object {
-			data: Rc::new(data),
+			data: Arc::new(data),
 			expiry,
 		}
 	}
 
-	pub fn get_data(&self) -> &Rc<T> {
-		&self.data
+	pub fn data(&self) -> Arc<T> {
+		self.data.clone()
 	}
 
-	pub fn get_size(&self) -> u64 {
+	pub fn size(&self) -> u64 {
 		self.data.mem_size() as u64
 	}
 
-	pub fn get_expiry(&self) -> Option<u64> {
+	pub fn expiry(&self) -> Option<u64> {
 		self.expiry
 	}
 }
