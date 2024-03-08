@@ -5,19 +5,20 @@ use std::{
 };
 
 use dashmap::DashMap;
-
-use crossbeam_channel::{
-	Sender,
-	Receiver,
-	unbounded
-};
+use crossbeam_channel::unbounded;
 
 use crate::{
 	object::{Object, MemSize},
 	stats::Stats,
 	policy::Policy,
 	error::CacheError,
-	worker::{Worker, WorkerEvent, TtlWorker},
+	worker::{
+		Worker,
+		WorkerSender,
+		WorkerEvent,
+		PolicyWorker,
+		TtlWorker,
+	},
 };
 
 pub type CacheSize = u64;
@@ -33,8 +34,7 @@ where
 	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 
-	worker_sender: Sender<WorkerEvent<K>>,
-	worker_receiver: Receiver<WorkerEvent<K>>,
+	workers: Arc<Vec<WorkerSender<K>>>,
 }
 
 impl<K, V> PaperCache<K, V>
@@ -73,42 +73,35 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		policies: Option<Vec<Policy>>
+		policies: &[Policy],
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		let policies = match policies {
-			Some(policies) => {
-				if policies.is_empty() {
-					return Err(CacheError::EmptyPolicies);
-				}
+		if policies.is_empty() {
+			return Err(CacheError::EmptyPolicies);
+		}
 
-				policies
-			},
+		let objects = Arc::new(DashMap::default());
+		let stats = Arc::new(RwLock::new(Stats::new(max_size, policies[0])));
 
-			None => vec![
-				Policy::Lfu,
-				Policy::Fifo,
-				Policy::Lru,
-				Policy::Mru,
-			],
-		};
+		let policy_worker = register_worker(PolicyWorker::<K, V>::new(
+			objects.clone(),
+			stats.clone(),
+			policies.into(),
+		));
 
-		let stats = Stats::new(max_size, policies[0]);
-
-		let (worker_sender, worker_receiver) = unbounded();
+		let ttl_worker = register_worker(TtlWorker::<K, V>::new(
+			objects.clone(),
+			stats.clone(),
+		));
 
 		let cache = PaperCache {
-			objects: Arc::new(DashMap::default()),
-			stats: Arc::new(RwLock::new(stats)),
-
-			worker_sender,
-			worker_receiver,
+			objects,
+			stats,
+			workers: Arc::new(vec![policy_worker, ttl_worker]),
 		};
-
-		cache.register_worker::<TtlWorker<K, V>>();
 
 		Ok(cache)
 	}
@@ -200,7 +193,7 @@ where
 			}
 		};
 
-		self.send_to_workers(WorkerEvent::Get(key))?;
+		self.broadcast(WorkerEvent::Get(key))?;
 
 		result
 	}
@@ -229,6 +222,7 @@ where
 	pub fn set(&self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
 		let object = Object::new(value, ttl);
 		let size = object.size();
+		let expiry = object.expiry();
 
 		if size == 0 {
 			return Err(CacheError::ZeroValueSize);
@@ -248,7 +242,7 @@ where
 
 		stats.increase_used_size(size);
 
-		self.send_to_workers(WorkerEvent::Set(key, size, ttl))?;
+		self.broadcast(WorkerEvent::Set(key, size, expiry))?;
 
 		Ok(())
 	}
@@ -275,17 +269,15 @@ where
 	/// }
 	/// ```
 	pub fn del(&self, key: K) -> Result<(), CacheError> {
-		let result = self.erase(key);
+		let object = erase(&self.objects, &self.stats, key)?;
 
-		if result.is_ok() {
-			self.stats
-				.write().map_err(|_| CacheError::Internal)?
-				.del();
-		}
+		self.stats
+			.write().map_err(|_| CacheError::Internal)?
+			.del();
 
-		self.send_to_workers(WorkerEvent::Del(key))?;
+		self.broadcast(WorkerEvent::Del(key, object.expiry()))?;
 
-		result
+		Ok(())
 	}
 
 	/// Checks if an object with the supplied key exists in the cache without
@@ -371,7 +363,7 @@ where
 			.write().map_err(|_| CacheError::Internal)?
 			.reset_used_size();
 
-		self.send_to_workers(WorkerEvent::Wipe)?;
+		self.broadcast(WorkerEvent::Wipe)?;
 
 		Ok(())
 	}
@@ -405,6 +397,8 @@ where
 			.write().map_err(|_| CacheError::Internal)?
 			.set_max_size(max_size);
 
+		self.broadcast(WorkerEvent::Resize(max_size))?;
+
 		Ok(())
 	}
 
@@ -433,37 +427,52 @@ where
 		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
 		stats.set_policy(policy);
 
-		Ok(())
-	}
-
-	/// Registers a new background worker which implements [`Worker`].
-	/// The worker will get an event broadcast channel and references
-	/// to the underlying object map and cache stats.
-	pub fn register_worker<T: Worker<K, V>>(&self) {
-		let worker = T::new(
-			self.worker_receiver.clone(),
-			self.objects.clone(),
-			self.stats.clone(),
-		);
-
-		thread::spawn(move || worker.start());
-	}
-
-	fn erase(&self, key: K) -> Result<(), CacheError> {
-		let (_, object) = self.objects
-			.remove(&key)
-			.ok_or(CacheError::KeyNotFound)?;
-
-		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
-
-		stats.decrease_used_size(object.size());
+		self.broadcast(WorkerEvent::Policy(policy))?;
 
 		Ok(())
 	}
 
-	fn send_to_workers(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
-		self.worker_sender.send(event).map_err(|_| CacheError::Internal)
+	fn broadcast(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
+		for worker in self.workers.iter() {
+			worker.send(event.clone()).map_err(|_| CacheError::Internal)?;
+		}
+
+		Ok(())
 	}
+}
+
+/// Registers a new background worker which implements [`Worker`].
+pub fn register_worker<K, V>(mut worker: impl Worker<K, V>) -> WorkerSender<K>
+where
+	K: 'static + Copy + Eq + Hash + Sync,
+	V: 'static + Sync + MemSize,
+{
+	let (sender, receiver) = unbounded();
+	worker.listen(receiver);
+
+	thread::spawn(move || worker.run());
+
+	sender
+}
+
+pub fn erase<K, V>(
+	objects: &ObjectMapRef<K, V>,
+	stats: &StatsRef,
+	key: K,
+) -> Result<Object<V>, CacheError>
+where
+	K: 'static + Copy + Eq + Hash + Sync,
+	V: 'static + Sync + MemSize,
+{
+	let (_, object) = objects
+		.remove(&key)
+		.ok_or(CacheError::KeyNotFound)?;
+
+	let mut stats = stats.write().map_err(|_| CacheError::Internal)?;
+
+	stats.decrease_used_size(object.size());
+
+	Ok(object)
 }
 
 unsafe impl<K, V> Send for PaperCache<K, V>

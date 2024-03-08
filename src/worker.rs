@@ -1,33 +1,41 @@
+mod policy;
 mod ttl;
 
 use std::hash::Hash;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
-	paper_cache::{ObjectMapRef, StatsRef},
-	object::MemSize,
+	paper_cache::CacheSize,
+	object::{MemSize, ObjectSize, ExpireTime},
+	policy::Policy,
 };
 
+pub type WorkerSender<K> = Sender<WorkerEvent<K>>;
+pub type WorkerReceiver<K> = Receiver<WorkerEvent<K>>;
+
+#[derive(Clone)]
 pub enum WorkerEvent<K> {
 	Get(K),
-	Set(K, u64, Option<u32>),
-	Del(K),
+	Set(K, ObjectSize, ExpireTime),
+	Del(K, ExpireTime),
+
 	Wipe,
+
+	Resize(CacheSize),
+	Policy(Policy),
 }
 
 pub trait Worker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	fn new(
-		events: Receiver<WorkerEvent<K>>,
-		objects: ObjectMapRef<K, V>,
-		stats: StatsRef,
-	) -> Self where Self: Sized;
-
-	fn start(&self);
+	fn run(&mut self);
+	fn listen(&mut self, events: WorkerReceiver<K>);
 }
 
-pub use crate::worker::ttl::TtlWorker;
+pub use crate::worker::{
+	policy::PolicyWorker,
+	ttl::TtlWorker,
+};

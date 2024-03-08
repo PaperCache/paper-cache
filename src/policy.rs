@@ -1,8 +1,7 @@
 mod policy_stack;
-mod policy_type;
 
 use std::hash::Hash;
-pub use crate::policy::policy_type::PolicyType;
+pub use crate::policy::policy_stack::PolicyStackType;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Policy {
@@ -14,39 +13,39 @@ pub enum Policy {
 
 impl Policy {
 	#[must_use]
-	pub fn as_policy_type<K>(&self) -> PolicyType<K>
+	pub fn as_policy_stack_type<K>(&self) -> PolicyStackType<K>
 	where
-		K: Eq + Hash,
+		K: Copy + Eq + Hash,
 	{
 		match self {
-			Policy::Lfu => PolicyType::Lfu(Box::default()),
-			Policy::Fifo => PolicyType::Fifo(Box::default()),
-			Policy::Lru => PolicyType::Lru(Box::default()),
-			Policy::Mru => PolicyType::Mru(Box::default()),
+			Policy::Lfu => PolicyStackType::Lfu(Box::default()),
+			Policy::Fifo => PolicyStackType::Fifo(Box::default()),
+			Policy::Lru => PolicyStackType::Lru(Box::default()),
+			Policy::Mru => PolicyStackType::Mru(Box::default()),
 		}
 	}
 }
 
-impl<K> PartialEq<PolicyType<K>> for Policy
+impl<K> PartialEq<PolicyStackType<K>> for Policy
 where
-	K: Eq + Hash,
+	K: Copy + Eq + Hash,
 {
-	fn eq(&self, policy_type: &PolicyType<K>) -> bool {
+	fn eq(&self, policy_type: &PolicyStackType<K>) -> bool {
 		matches!(
 			(self, policy_type),
-			(Policy::Lfu, PolicyType::Lfu(_))
-			| (Policy::Fifo, PolicyType::Fifo(_))
-			| (Policy::Lru, PolicyType::Lru(_))
-			| (Policy::Mru, PolicyType::Mru(_))
+			(Policy::Lfu, PolicyStackType::Lfu(_))
+			| (Policy::Fifo, PolicyStackType::Fifo(_))
+			| (Policy::Lru, PolicyStackType::Lru(_))
+			| (Policy::Mru, PolicyStackType::Mru(_))
 		)
 	}
 }
 
-impl<K> PartialEq<&PolicyType<K>> for Policy
+impl<K> PartialEq<&PolicyStackType<K>> for Policy
 where
-	K: Eq + Hash,
+	K: Copy + Eq + Hash,
 {
-	fn eq(&self, policy_type: &&PolicyType<K>) -> bool {
+	fn eq(&self, policy_type: &&PolicyStackType<K>) -> bool {
 		self.eq(*policy_type)
 	}
 }

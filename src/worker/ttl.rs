@@ -4,47 +4,81 @@ use std::{
 	time::Duration,
 };
 
-use crossbeam_channel::Receiver;
+use kwik::utils;
 
 use crate::{
-	paper_cache::{ObjectMapRef, StatsRef},
+	paper_cache::{ObjectMapRef, StatsRef, erase},
 	object::MemSize,
-	worker::{Worker, WorkerEvent},
+	worker::{Worker, WorkerEvent, WorkerReceiver},
+	expiries::Expiries,
 };
 
 pub struct TtlWorker<K, V>
 where
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	events: Receiver<WorkerEvent<K>>,
+	listener: Option<WorkerReceiver<K>>,
+
 	objects: ObjectMapRef<K, V>,
+	stats: StatsRef,
+
+	expiries: Expiries<K>,
 }
 
 impl<K, V> Worker<K, V> for TtlWorker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Eq + Hash + Sync,
+	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 {
-	fn new(
-		events: Receiver<WorkerEvent<K>>,
-		objects: ObjectMapRef<K, V>,
-		_: StatsRef,
-	) -> Self {
-		TtlWorker {
-			objects,
-			events,
-		}
-	}
-
-	fn start(&self) {
+	fn run(&mut self) {
 		loop {
-			if let Ok(event) = self.events.try_recv() {
-				// handle event here
+			let now = utils::timestamp();
+
+			if let Some(listener) = &self.listener {
+				for event in listener.try_iter() {
+					match event {
+						WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
+						WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
+						WorkerEvent::Wipe => self.expiries.clear(),
+
+						_ => {},
+					}
+				}
+			}
+
+			if let Some(expired) = self.expiries.expired(now) {
+				for key in expired {
+					erase(&self.objects, &self.stats, key).ok();
+				}
 			}
 
 			thread::sleep(Duration::from_millis(1));
+		}
+	}
+
+	fn listen(&mut self, listener: WorkerReceiver<K>) {
+		self.listener = Some(listener);
+	}
+}
+
+impl<K, V> TtlWorker<K, V>
+where
+	K: 'static + Copy + Eq + Hash + Sync,
+	V: 'static + Sync + MemSize,
+{
+	pub fn new(
+		objects: ObjectMapRef<K, V>,
+		stats: StatsRef,
+	) -> Self {
+		TtlWorker {
+			listener: None,
+
+			objects,
+			stats,
+
+			expiries: Expiries::default(),
 		}
 	}
 }

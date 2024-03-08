@@ -1,12 +1,15 @@
 use std::sync::Arc;
 use kwik::utils;
 
+pub type ObjectSize = u64;
+pub type ExpireTime = Option<u64>;
+
 pub struct Object<T>
 where
 	T: MemSize,
 {
 	data: Arc<T>,
-	expiry: Option<u64>,
+	expiry: ExpireTime,
 }
 
 pub trait MemSize {
@@ -20,11 +23,7 @@ where
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
 		let expiry = match ttl {
 			Some(0) | None => None,
-
-			Some(ttl) => {
-				let now = utils::timestamp();
-				Some(u64::from(ttl) * 1000 + now)
-			},
+			Some(ttl) => Some(utils::timestamp() + u64::from(ttl) * 1000),
 		};
 
 		Object {
@@ -37,11 +36,11 @@ where
 		self.data.clone()
 	}
 
-	pub fn size(&self) -> u64 {
-		self.data.mem_size() as u64
+	pub fn size(&self) -> ObjectSize {
+		self.data.mem_size() as ObjectSize
 	}
 
-	pub fn expiry(&self) -> Option<u64> {
+	pub fn expiry(&self) -> ExpireTime {
 		self.expiry
 	}
 }
