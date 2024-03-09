@@ -34,8 +34,8 @@ where
 	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 
-	policies: Arc<Vec<Policy>>,
-	workers: Arc<Vec<WorkerSender<K>>>,
+	policies: Arc<Box<[Policy]>>,
+	workers: Arc<Box<[WorkerSender<K>]>>,
 }
 
 impl<K, V> PaperCache<K, V>
@@ -103,7 +103,7 @@ where
 			stats,
 
 			policies: Arc::new(policies.into()),
-			workers: Arc::new(vec![policy_worker, ttl_worker]),
+			workers: Arc::new(Box::new([policy_worker, ttl_worker])),
 		};
 
 		Ok(cache)
