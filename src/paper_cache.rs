@@ -50,11 +50,8 @@ where
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
 	/// The cache will only consider eviction policies specified
 	/// by `policies` and return an error if the number of supplied
-	/// `policies` is zero. If `None` is passed here, the cache
-	/// will consider all eviction policies.
-	///
-	/// The cache's initial eviction policy will be the first policy or
-	/// LFU if `None` is passed.
+	/// `policies` is zero. The cache's initial eviction policy will
+	/// be the first policy.
 	///
 	/// # Examples
 	///
@@ -79,6 +76,30 @@ where
 		max_size: CacheSize,
 		policies: &[Policy],
 	) -> Result<Self, CacheError> {
+		Self::with_hasher(max_size, policies, Default::default())
+	}
+
+	/// Creates an empty `PaperCache` with the supplied hasher.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use std::collections::hash_map::RandomState;
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
+	///
+	/// assert!(PaperCache::<u32, Object>::with_hasher(100, &[Policy::Lru], RandomState::default()).is_ok());
+	///
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
+	/// ```
+	pub fn with_hasher(
+		max_size: CacheSize,
+		policies: &[Policy],
+		hasher: S,
+	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
@@ -87,7 +108,7 @@ where
 			return Err(CacheError::EmptyPolicies);
 		}
 
-		let objects = Arc::new(DashMap::default());
+		let objects = Arc::new(DashMap::with_hasher(hasher));
 		let stats = Arc::new(RwLock::new(Stats::new(max_size, policies[0])));
 
 		let policy_worker = register_worker(PolicyWorker::<K, V, S>::new(
