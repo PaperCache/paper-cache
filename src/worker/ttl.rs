@@ -19,7 +19,7 @@ where
 	V: 'static + Sync + MemSize,
 	S: Default + Clone + BuildHasher,
 {
-	listener: Option<WorkerReceiver<K>>,
+	listener: WorkerReceiver<K>,
 
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
@@ -38,15 +38,13 @@ where
 		loop {
 			let now = utils::timestamp();
 
-			if let Some(listener) = &self.listener {
-				for event in listener.try_iter() {
-					match event {
-						WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
-						WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
-						WorkerEvent::Wipe => self.expiries.clear(),
+			for event in self.listener.try_iter() {
+				match event {
+					WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
+					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
+					WorkerEvent::Wipe => self.expiries.clear(),
 
-						_ => {},
-					}
+					_ => {},
 				}
 			}
 
@@ -59,10 +57,6 @@ where
 			thread::sleep(Duration::from_millis(1));
 		}
 	}
-
-	fn listen(&mut self, listener: WorkerReceiver<K>) {
-		self.listener = Some(listener);
-	}
 }
 
 impl<K, V, S> TtlWorker<K, V, S>
@@ -72,11 +66,12 @@ where
 	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
+		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 	) -> Self {
 		TtlWorker {
-			listener: None,
+			listener,
 
 			objects,
 			stats,

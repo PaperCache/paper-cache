@@ -33,7 +33,6 @@ where
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self);
-	fn listen(&mut self, events: WorkerReceiver<K>);
 }
 
 pub use crate::worker::{

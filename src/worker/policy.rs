@@ -8,7 +8,7 @@ use crossbeam_channel::Receiver;
 
 use crate::{
 	paper_cache::{CacheSize, ObjectMapRef, StatsRef, erase},
-	object::MemSize,
+	object::{MemSize, ObjectSize},
 	worker::{Worker, WorkerEvent, WorkerReceiver},
 	policy::{Policy, PolicyStack, PolicyStackType},
 };
@@ -19,7 +19,7 @@ where
 	V: 'static + Sync + MemSize,
 	S: Default + Clone + BuildHasher,
 {
-	listener: Option<Receiver<WorkerEvent<K>>>,
+	listener: Receiver<WorkerEvent<K>>,
 
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
@@ -39,44 +39,25 @@ where
 {
 	fn run(&mut self) {
 		loop {
-			if let Some(listener) = &self.listener {
-				for event in listener.try_iter() {
-					match event {
-						WorkerEvent::Get(key) => {
-							for policy_stack in self.policy_stacks.iter_mut() {
-								policy_stack.update(key);
-							}
-						},
+			let events = self.listener
+				.try_iter()
+				.collect::<Vec<WorkerEvent<K>>>();
 
-						WorkerEvent::Set(key, size, _) => {
-							for policy_stack in self.policy_stacks.iter_mut() {
-								policy_stack.insert(key, size);
-							}
-						},
+			for event in events.iter() {
+				match *event {
+					WorkerEvent::Get(key) => self.handle_get(key),
+					WorkerEvent::Set(key, size, _) => self.handle_set(key, size),
+					WorkerEvent::Del(key, _) => self.handle_del(key),
+					WorkerEvent::Wipe => self.handle_wipe(),
 
-						WorkerEvent::Del(key, _) => {
-							for policy_stack in self.policy_stacks.iter_mut() {
-								policy_stack.remove(key);
-							}
-						},
+					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
 
-						WorkerEvent::Wipe => {
-							for policy_stack in self.policy_stacks.iter_mut() {
-								policy_stack.clear();
-							}
-						},
-
-						WorkerEvent::Resize(max_cache_size) => {
-							self.max_cache_size = max_cache_size;
-						},
-
-						WorkerEvent::Policy(policy) => {
-							self.policy_index = self.policy_stacks
-								.iter()
-								.position(|policy_stack| policy_stack.is_policy(policy))
-								.unwrap_or(0);
-						},
-					}
+					WorkerEvent::Policy(policy) => {
+						self.policy_index = self.policy_stacks
+							.iter()
+							.position(|policy_stack| policy_stack.is_policy(policy))
+							.unwrap_or(0);
+					},
 				}
 			}
 
@@ -89,10 +70,6 @@ where
 			thread::sleep(Duration::from_millis(1));
 		}
 	}
-
-	fn listen(&mut self, listener: WorkerReceiver<K>) {
-		self.listener = Some(listener);
-	}
 }
 
 impl<K, V, S> PolicyWorker<K, V, S>
@@ -102,6 +79,7 @@ where
 	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
+		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		policies: Vec<Policy>,
@@ -118,7 +96,7 @@ where
 		let policy_index = 0;
 
 		PolicyWorker {
-			listener: None,
+			listener,
 
 			objects,
 			stats,
@@ -127,6 +105,30 @@ where
 
 			policy_stacks,
 			policy_index,
+		}
+	}
+
+	fn handle_get(&mut self, key: K) {
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.update(key);
+		}
+	}
+
+	fn handle_set(&mut self, key: K, size: ObjectSize) {
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.insert(key, size);
+		}
+	}
+
+	fn handle_del(&mut self, key: K) {
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.remove(key);
+		}
+	}
+
+	fn handle_wipe(&mut self) {
+		for policy_stack in self.policy_stacks.iter_mut() {
+			policy_stack.clear();
 		}
 	}
 }

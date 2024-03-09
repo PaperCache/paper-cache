@@ -111,13 +111,18 @@ where
 		let objects = Arc::new(DashMap::with_hasher(hasher));
 		let stats = Arc::new(RwLock::new(Stats::new(max_size, policies[0])));
 
-		let policy_worker = register_worker(PolicyWorker::<K, V, S>::new(
+		let (policy_worker, policy_listener) = unbounded();
+		let (ttl_worker, ttl_listener) = unbounded();
+
+		register_worker(PolicyWorker::<K, V, S>::new(
+			policy_listener,
 			objects.clone(),
 			stats.clone(),
 			policies.into(),
 		));
 
-		let ttl_worker = register_worker(TtlWorker::<K, V, S>::new(
+		register_worker(TtlWorker::<K, V, S>::new(
+			ttl_listener,
 			objects.clone(),
 			stats.clone(),
 		));
@@ -473,18 +478,13 @@ where
 }
 
 /// Registers a new background worker which implements [`Worker`].
-fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>) -> WorkerSender<K>
+fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
 	S: Default + Clone + BuildHasher,
 {
-	let (sender, receiver) = unbounded();
-	worker.listen(receiver);
-
 	thread::spawn(move || worker.run());
-
-	sender
 }
 
 pub fn erase<K, V, S>(
