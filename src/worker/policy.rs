@@ -1,7 +1,7 @@
 use std::{
-	hash::Hash,
-	thread,
+	hash::{Hash, BuildHasher},
 	time::Duration,
+	thread,
 };
 
 use crossbeam_channel::Receiver;
@@ -13,14 +13,15 @@ use crate::{
 	policy::{Policy, PolicyStack, PolicyStackType},
 };
 
-pub struct PolicyWorker<K, V>
+pub struct PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	listener: Option<Receiver<WorkerEvent<K>>>,
 
-	objects: ObjectMapRef<K, V>,
+	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
 
 	max_cache_size: CacheSize,
@@ -29,11 +30,12 @@ where
 	policy_index: usize,
 }
 
-impl<K, V> Worker<K, V> for PolicyWorker<K, V>
+impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
 where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) {
 		loop {
@@ -93,13 +95,14 @@ where
 	}
 }
 
-impl<K, V> PolicyWorker<K, V>
+impl<K, V, S> PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
-		objects: ObjectMapRef<K, V>,
+		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		policies: Vec<Policy>,
 	) -> Self {
@@ -128,8 +131,9 @@ where
 	}
 }
 
-unsafe impl<K, V> Send for PolicyWorker<K, V>
+unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {}

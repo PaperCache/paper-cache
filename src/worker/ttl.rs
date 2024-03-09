@@ -1,7 +1,7 @@
 use std::{
-	hash::Hash,
-	thread,
+	hash::{Hash, BuildHasher},
 	time::Duration,
+	thread,
 };
 
 use kwik::utils;
@@ -13,24 +13,26 @@ use crate::{
 	expiries::Expiries,
 };
 
-pub struct TtlWorker<K, V>
+pub struct TtlWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	listener: Option<WorkerReceiver<K>>,
 
-	objects: ObjectMapRef<K, V>,
+	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
 
 	expiries: Expiries<K>,
 }
 
-impl<K, V> Worker<K, V> for TtlWorker<K, V>
+impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
 where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) {
 		loop {
@@ -63,13 +65,14 @@ where
 	}
 }
 
-impl<K, V> TtlWorker<K, V>
+impl<K, V, S> TtlWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
-		objects: ObjectMapRef<K, V>,
+		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 	) -> Self {
 		TtlWorker {
@@ -83,8 +86,9 @@ where
 	}
 }
 
-unsafe impl<K, V> Send for TtlWorker<K, V>
+unsafe impl<K, V, S> Send for TtlWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {}

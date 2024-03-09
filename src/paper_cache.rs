@@ -1,6 +1,7 @@
 use std::{
 	sync::{Arc, RwLock},
-	hash::Hash,
+	hash::{Hash, BuildHasher},
+	collections::hash_map::RandomState,
 	thread,
 };
 
@@ -23,25 +24,27 @@ use crate::{
 
 pub type CacheSize = u64;
 
-pub type ObjectMapRef<K, V> = Arc<DashMap<K, Object<V>>>;
+pub type ObjectMapRef<K, V, S> = Arc<DashMap<K, Object<V>, S>>;
 pub type StatsRef = Arc<RwLock<Stats>>;
 
-pub struct PaperCache<K, V>
+pub struct PaperCache<K, V, S = RandomState>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + BuildHasher+ Clone,
 {
-	objects: ObjectMapRef<K, V>,
+	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
 
 	policies: Arc<Box<[Policy]>>,
 	workers: Arc<Box<[WorkerSender<K>]>>,
 }
 
-impl<K, V> PaperCache<K, V>
+impl<K, V, S> PaperCache<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: 'static + Default + Clone + BuildHasher,
 {
 	/// Creates an empty `PaperCache` with maximum size `max_size`.
 	/// If the maximum size is zero, a [`CacheError`] will be returned.
@@ -87,13 +90,13 @@ where
 		let objects = Arc::new(DashMap::default());
 		let stats = Arc::new(RwLock::new(Stats::new(max_size, policies[0])));
 
-		let policy_worker = register_worker(PolicyWorker::<K, V>::new(
+		let policy_worker = register_worker(PolicyWorker::<K, V, S>::new(
 			objects.clone(),
 			stats.clone(),
 			policies.into(),
 		));
 
-		let ttl_worker = register_worker(TtlWorker::<K, V>::new(
+		let ttl_worker = register_worker(TtlWorker::<K, V, S>::new(
 			objects.clone(),
 			stats.clone(),
 		));
@@ -449,10 +452,11 @@ where
 }
 
 /// Registers a new background worker which implements [`Worker`].
-fn register_worker<K, V>(mut worker: impl Worker<K, V>) -> WorkerSender<K>
+fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>) -> WorkerSender<K>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	let (sender, receiver) = unbounded();
 	worker.listen(receiver);
@@ -462,14 +466,15 @@ where
 	sender
 }
 
-pub fn erase<K, V>(
-	objects: &ObjectMapRef<K, V>,
+pub fn erase<K, V, S>(
+	objects: &ObjectMapRef<K, V, S>,
 	stats: &StatsRef,
 	key: K,
 ) -> Result<Object<V>, CacheError>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	let (_, object) = objects
 		.remove(&key)
@@ -482,8 +487,9 @@ where
 	Ok(object)
 }
 
-unsafe impl<K, V> Send for PaperCache<K, V>
+unsafe impl<K, V, S> Send for PaperCache<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {}

@@ -1,7 +1,7 @@
 mod policy;
 mod ttl;
 
-use std::hash::Hash;
+use std::hash::{Hash, BuildHasher};
 use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
@@ -25,11 +25,12 @@ pub enum WorkerEvent<K> {
 	Policy(Policy),
 }
 
-pub trait Worker<K, V>
+pub trait Worker<K, V, S>
 where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
+	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self);
 	fn listen(&mut self, events: WorkerReceiver<K>);
