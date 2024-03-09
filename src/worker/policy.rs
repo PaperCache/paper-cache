@@ -5,6 +5,7 @@ use std::{
 };
 
 use crossbeam_channel::Receiver;
+use kwik::utils;
 
 use crate::{
 	paper_cache::{CacheSize, ObjectMapRef, StatsRef, erase},
@@ -28,6 +29,8 @@ where
 
 	policy_stacks: Vec<PolicyStackType<K>>,
 	policy_index: usize,
+
+	last_set_time: Option<u64>,
 }
 
 impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
@@ -43,10 +46,17 @@ where
 				.try_iter()
 				.collect::<Vec<WorkerEvent<K>>>();
 
+			let mut has_current_set = false;
+
 			for event in events {
 				match event {
 					WorkerEvent::Get(key) => self.handle_get(key),
-					WorkerEvent::Set(key, size, _) => self.handle_set(key, size),
+
+					WorkerEvent::Set(key, size, _) => {
+						has_current_set = true;
+						self.handle_set(key, size)
+					},
+
 					WorkerEvent::Del(key, _) => self.handle_del(key),
 					WorkerEvent::Wipe => self.handle_wipe(),
 
@@ -67,7 +77,21 @@ where
 				erase(&self.objects, &self.stats, key).ok();
 			}
 
-			thread::sleep(Duration::from_millis(1));
+			let now = utils::timestamp();
+
+			let has_recent_set = self.last_set_time
+				.is_some_and(|last_set_time| now - last_set_time <= 5000);
+
+			if has_current_set {
+				self.last_set_time = Some(now);
+			}
+
+			let delay = match has_recent_set {
+				true => 1,
+				false => 1000,
+			};
+
+			thread::sleep(Duration::from_millis(delay));
 		}
 	}
 }
@@ -105,6 +129,8 @@ where
 
 			policy_stacks,
 			policy_index,
+
+			last_set_time: None,
 		}
 	}
 
