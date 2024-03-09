@@ -38,12 +38,7 @@ where
 		loop {
 			let now = utils::timestamp();
 
-			let events = match self.expiries.is_empty() {
-				true => self.listener.iter().collect::<Vec<WorkerEvent<K>>>(),
-				false => self.listener.try_iter().collect::<Vec<WorkerEvent<K>>>(),
-			};
-
-			for event in events {
+			for event in self.listener.try_iter() {
 				match event {
 					WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
 					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
@@ -59,7 +54,12 @@ where
 				}
 			}
 
-			thread::sleep(Duration::from_millis(1));
+			let delay = match self.expiries.is_empty() {
+				true => 1000,
+				false => 1,
+			};
+
+			thread::sleep(Duration::from_millis(delay));
 		}
 	}
 }

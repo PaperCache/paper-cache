@@ -1,4 +1,9 @@
-use std::hash::{Hash, BuildHasher};
+use std::{
+	hash::{Hash, BuildHasher},
+	time::Duration,
+	thread,
+};
+
 use crossbeam_channel::Receiver;
 
 use crate::{
@@ -35,11 +40,11 @@ where
 	fn run(&mut self) {
 		loop {
 			let events = self.listener
-				.iter()
+				.try_iter()
 				.collect::<Vec<WorkerEvent<K>>>();
 
-			for event in events.iter() {
-				match *event {
+			for event in events {
+				match event {
 					WorkerEvent::Get(key) => self.handle_get(key),
 					WorkerEvent::Set(key, size, _) => self.handle_set(key, size),
 					WorkerEvent::Del(key, _) => self.handle_del(key),
@@ -61,6 +66,8 @@ where
 			while let Some(key) = policy_stack.eviction(self.max_cache_size) {
 				erase(&self.objects, &self.stats, key).ok();
 			}
+
+			thread::sleep(Duration::from_millis(1));
 		}
 	}
 }
