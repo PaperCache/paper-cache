@@ -109,7 +109,7 @@ mod tests {
 
 		let mut eviction_count = 0;
 
-		while let Some(key) = stack.eviction(1) {
+		while let Some(key) = stack.eviction(0) {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
 				None => assert!(false),

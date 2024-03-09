@@ -34,6 +34,7 @@ where
 	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 
+	policies: Arc<Vec<Policy>>,
 	workers: Arc<Vec<WorkerSender<K>>>,
 }
 
@@ -57,13 +58,13 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// assert!(PaperCache::<u32, Object>::new(100, Some(vec![Policy::Lru])).is_ok());
+	/// assert!(PaperCache::<u32, Object>::new(100, &[Policy::Lru]).is_ok());
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![Policy::Lru])).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(0, &[Policy::Lru]).is_err());
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(0, Some(vec![])).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(0, &[]).is_err());
 	///
 	/// struct Object;
 	///
@@ -100,6 +101,8 @@ where
 		let cache = PaperCache {
 			objects,
 			stats,
+
+			policies: Arc::new(policies.into()),
 			workers: Arc::new(vec![policy_worker, ttl_worker]),
 		};
 
@@ -110,9 +113,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	/// assert_eq!(cache.version(), "0.1.0");
 	///
 	/// struct Object;
@@ -130,13 +133,13 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
-	/// assert_eq!(cache.stats().get_used_size(), 4);
+	/// assert_eq!(cache.stats().unwrap().get_used_size(), 4);
 	///
 	/// struct Object;
 	///
@@ -157,9 +160,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
@@ -207,9 +210,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// assert!(cache.set(0, Object, None).is_ok());
 	///
@@ -252,15 +255,15 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
-	/// assert!(cache.del(&0).is_ok());
+	/// assert!(cache.del(0).is_ok());
 	///
 	/// // Deleting a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.del(&1).is_err());
+	/// assert!(cache.del(1).is_err());
 	///
 	/// struct Object;
 	///
@@ -285,14 +288,14 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
-	/// assert!(cache.has(&0));
-	/// assert!(!cache.has(&1));
+	/// assert!(cache.has(0));
+	/// assert!(!cache.has(1));
 	///
 	/// struct Object;
 	///
@@ -310,23 +313,23 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(8, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(8, &[Policy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	/// cache.set(1, Object, None);
 	///
 	/// // Peeking a key which exists in the cache will return the associated value.
-	/// assert!(cache.peek(&0).is_ok());
+	/// assert!(cache.peek(0).is_ok());
 	/// // Peeking a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.peek(&2).is_err());
+	/// assert!(cache.peek(2).is_err());
 	///
 	/// cache.set(2, Object, None);
 	///
 	/// // Peeking a key will not alter the eviction order of the objects.
-	/// assert!(cache.peek(&1).is_ok());
-	/// assert!(cache.peek(&2).is_ok());
+	/// assert!(cache.peek(1).is_ok());
+	/// assert!(cache.peek(2).is_ok());
 	///
 	/// struct Object;
 	///
@@ -345,9 +348,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	/// cache.wipe();
 	///
 	/// struct Object;
@@ -373,9 +376,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, None).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
 	///
 	/// assert!(cache.resize(1).is_ok());
 	///
@@ -408,9 +411,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, ObjectMemSize, Policy};
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, Some(vec![Policy::Lru])).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lru]).unwrap();
 	///
 	/// assert!(cache.policy(Policy::Lru).is_ok());
 	///
@@ -424,6 +427,10 @@ where
 	/// }
 	/// ```
 	pub fn policy(&self, policy: Policy) -> Result<(), CacheError> {
+		if !self.policies.contains(&policy) {
+			return Err(CacheError::UnconfiguredPolicy);
+		}
+
 		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
 		stats.set_policy(policy);
 
