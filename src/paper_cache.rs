@@ -449,7 +449,7 @@ where
 }
 
 /// Registers a new background worker which implements [`Worker`].
-pub fn register_worker<K, V>(mut worker: impl Worker<K, V>) -> WorkerSender<K>
+fn register_worker<K, V>(mut worker: impl Worker<K, V>) -> WorkerSender<K>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
