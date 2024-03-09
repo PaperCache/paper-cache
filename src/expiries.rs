@@ -17,6 +17,10 @@ impl<K> Expiries<K>
 where
 	K: Copy + Eq + Hash,
 {
+	pub fn is_empty(&self) -> bool {
+		self.map.is_empty()
+	}
+
 	pub fn insert(&mut self, key: K, expiry: ExpireTime) {
 		let Some(expiry) = expiry else {
 			return;

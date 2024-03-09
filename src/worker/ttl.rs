@@ -38,7 +38,12 @@ where
 		loop {
 			let now = utils::timestamp();
 
-			for event in self.listener.try_iter() {
+			let events = match self.expiries.is_empty() {
+				true => self.listener.iter().collect::<Vec<WorkerEvent<K>>>(),
+				false => self.listener.try_iter().collect::<Vec<WorkerEvent<K>>>(),
+			};
+
+			for event in events {
 				match event {
 					WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
 					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
