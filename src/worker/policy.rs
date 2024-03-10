@@ -72,9 +72,21 @@ where
 			}
 
 			let policy_stack = &mut self.policy_stacks[self.policy_index];
+			let mut evicted_keys = Vec::<K>::new();
 
 			while let Some(key) = policy_stack.eviction(self.max_cache_size) {
 				erase(&self.objects, &self.stats, key).ok();
+				evicted_keys.push(key);
+			}
+
+			for key in evicted_keys {
+				for (index, policy_stack) in self.policy_stacks.iter_mut().enumerate() {
+					if index == self.policy_index {
+						continue;
+					}
+
+					policy_stack.remove(key);
+				}
 			}
 
 			let now = utils::timestamp();
