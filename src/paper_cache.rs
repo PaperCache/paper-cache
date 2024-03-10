@@ -145,7 +145,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "0.1.0");
+	/// assert_eq!(cache.version(), "1.1.0");
 	///
 	/// struct Object;
 	///
@@ -370,6 +370,37 @@ where
 		self.objects.get(&key)
 			.map(|object| object.data())
 			.ok_or(CacheError::KeyNotFound)
+	}
+
+	/// Sets the TTL associated with the supplied key.
+	/// If the key was not found in the cache, returns a [`CacheError`].
+	///
+	/// # Examples
+	/// ```
+	/// use paper_cache::{PaperCache, Policy, ObjectMemSize};
+	///
+	/// let mut cache = PaperCache::<u32, Object>::new(8, &[Policy::Lfu]).unwrap();
+	///
+	/// cache.set(0, Object, None); // value will not expire
+	/// cache.ttl(0, Some(5)); // value will expire in 5 seconds
+	///
+	/// struct Object;
+	///
+	/// impl ObjectMemSize for Object {
+	///     fn mem_size(&self) -> usize { 4 }
+	/// }
+	/// ```
+	pub fn ttl(&self, key: K, ttl: Option<u32>) -> Result<(), CacheError> {
+		let mut object = self.objects.get_mut(&key)
+			.ok_or(CacheError::KeyNotFound)?;
+
+		let old_expiry = object.expiry();
+		object.expires(ttl);
+		let new_expiry = object.expiry();
+
+		self.broadcast(WorkerEvent::Ttl(key, old_expiry, new_expiry))?;
+
+		Ok(())
 	}
 
 	/// Deletes all objects in the cache and sets the cache's used size to zero.

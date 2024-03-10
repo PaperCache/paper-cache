@@ -42,6 +42,12 @@ where
 				match event {
 					WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
 					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
+
+					WorkerEvent::Ttl(key, old_expiry, new_expiry) => {
+						self.expiries.remove(key, old_expiry);
+						self.expiries.insert(key, new_expiry);
+					},
+
 					WorkerEvent::Wipe => self.expiries.clear(),
 
 					_ => {},

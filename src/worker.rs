@@ -19,6 +19,8 @@ pub enum WorkerEvent<K> {
 	Set(K, ObjectSize, ExpireTime),
 	Del(K, ExpireTime),
 
+	Ttl(K, ExpireTime, ExpireTime),
+
 	Wipe,
 
 	Resize(CacheSize),

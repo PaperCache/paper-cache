@@ -68,6 +68,8 @@ where
 							.position(|policy_stack| policy_stack.is_policy(policy))
 							.unwrap_or(0);
 					},
+
+					_ => {},
 				}
 			}
 

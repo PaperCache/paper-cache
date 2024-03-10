@@ -43,4 +43,11 @@ where
 	pub fn expiry(&self) -> ExpireTime {
 		self.expiry
 	}
+
+	pub fn expires(&mut self, ttl: Option<u32>) {
+		self.expiry = match ttl {
+			Some(0) | None => None,
+			Some(ttl) => Some(utils::timestamp() + u64::from(ttl) * 1000),
+		};
+	}
 }
