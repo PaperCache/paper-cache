@@ -10,20 +10,6 @@ use crate::{
 	paper_cache::{CacheSize, AtomicCacheSize},
 };
 
-pub struct AtomicStats {
-	max_size: AtomicCacheSize,
-	used_size: AtomicCacheSize,
-
-	total_hits: AtomicU64,
-	total_gets: AtomicU64,
-	total_sets: AtomicU64,
-	total_dels: AtomicU64,
-
-	policy_index: AtomicUsize,
-
-	start_time: AtomicU64,
-}
-
 #[derive(Debug)]
 pub struct Stats {
 	max_size: CacheSize,
@@ -37,6 +23,20 @@ pub struct Stats {
 	policy: Policy,
 
 	start_time: u64,
+}
+
+pub struct AtomicStats {
+	max_size: AtomicCacheSize,
+	used_size: AtomicCacheSize,
+
+	total_hits: AtomicU64,
+	total_gets: AtomicU64,
+	total_sets: AtomicU64,
+	total_dels: AtomicU64,
+
+	policy_index: AtomicUsize,
+
+	start_time: AtomicU64,
 }
 
 /// This struct holds the basic statistical information about `PaperCache`.
