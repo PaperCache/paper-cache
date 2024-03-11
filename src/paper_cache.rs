@@ -1,5 +1,8 @@
 use std::{
-	sync::{Arc, RwLock},
+	sync::{
+		Arc,
+		atomic::AtomicU64,
+	},
 	hash::{Hash, BuildHasher},
 	collections::hash_map::RandomState,
 	thread,
@@ -10,7 +13,7 @@ use crossbeam_channel::unbounded;
 
 use crate::{
 	object::{Object, MemSize},
-	stats::Stats,
+	stats::{AtomicStats, Stats},
 	policy::Policy,
 	error::CacheError,
 	worker::{
@@ -23,9 +26,10 @@ use crate::{
 };
 
 pub type CacheSize = u64;
+pub type AtomicCacheSize = AtomicU64;
 
 pub type ObjectMapRef<K, V, S> = Arc<DashMap<K, Object<V>, S>>;
-pub type StatsRef = Arc<RwLock<Stats>>;
+pub type StatsRef = Arc<AtomicStats>;
 
 pub struct PaperCache<K, V, S = RandomState>
 where
@@ -109,7 +113,7 @@ where
 		}
 
 		let objects = Arc::new(DashMap::with_hasher(hasher));
-		let stats = Arc::new(RwLock::new(Stats::new(max_size, policies[0])));
+		let stats = Arc::new(AtomicStats::new(max_size, 0));
 
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();
@@ -176,12 +180,8 @@ where
 	///     fn mem_size(&self) -> usize { 4 }
 	/// }
 	/// ```
-	pub fn stats(&self) -> Result<Stats, CacheError> {
-		let stats = self.stats
-			.read().map_err(|_| CacheError::Internal)?
-			.clone();
-
-		Ok(stats)
+	pub fn stats(&self) -> Stats {
+		self.stats.to_stats(self.policies.clone())
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -209,20 +209,14 @@ where
 	pub fn get(&self, key: K) -> Result<Arc<V>, CacheError> {
 		let result = match self.objects.get(&key) {
 			Some(entry) => {
-				self.stats
-					.write().map_err(|_| CacheError::Internal)?
-					.hit();
-
+				self.stats.hit();
 				Ok(entry.data())
 			},
 
 			None => {
-				self.stats
-					.write().map_err(|_| CacheError::Internal)?
-					.miss();
-
+				self.stats.miss();
 				Err(CacheError::KeyNotFound)
-			}
+			},
 		};
 
 		self.broadcast(WorkerEvent::Get(key))?;
@@ -260,19 +254,17 @@ where
 			return Err(CacheError::ZeroValueSize);
 		}
 
-		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
-
-		if stats.exceeds_max_size(size) {
+		if self.stats.exceeds_max_size(size) {
 			return Err(CacheError::ExceedingValueSize);
 		}
 
-		stats.set();
+		self.stats.set();
 
 		if let Some(old_object) = self.objects.insert(key, object) {
-			stats.decrease_used_size(old_object.size());
+			self.stats.decrease_used_size(old_object.size());
 		}
 
-		stats.increase_used_size(size);
+		self.stats.increase_used_size(size);
 
 		self.broadcast(WorkerEvent::Set(key, size, expiry))?;
 
@@ -303,10 +295,7 @@ where
 	pub fn del(&self, key: K) -> Result<(), CacheError> {
 		let object = erase(&self.objects, &self.stats, key)?;
 
-		self.stats
-			.write().map_err(|_| CacheError::Internal)?
-			.del();
-
+		self.stats.del();
 		self.broadcast(WorkerEvent::Del(key, object.expiry()))?;
 
 		Ok(())
@@ -422,10 +411,7 @@ where
 	pub fn wipe(&self) -> Result<(), CacheError> {
 		self.objects.clear();
 
-		self.stats
-			.write().map_err(|_| CacheError::Internal)?
-			.reset_used_size();
-
+		self.stats.reset_used_size();
 		self.broadcast(WorkerEvent::Wipe)?;
 
 		Ok(())
@@ -456,10 +442,7 @@ where
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		self.stats
-			.write().map_err(|_| CacheError::Internal)?
-			.set_max_size(max_size);
-
+		self.stats.set_max_size(max_size);
 		self.broadcast(WorkerEvent::Resize(max_size))?;
 
 		Ok(())
@@ -487,13 +470,15 @@ where
 	/// }
 	/// ```
 	pub fn policy(&self, policy: Policy) -> Result<(), CacheError> {
-		if !self.policies.contains(&policy) {
+		let index = self.policies
+			.iter()
+			.position(|stored_policy| stored_policy.eq(&policy));
+
+		let Some(index) = index else {
 			return Err(CacheError::UnconfiguredPolicy);
-		}
+		};
 
-		let mut stats = self.stats.write().map_err(|_| CacheError::Internal)?;
-		stats.set_policy(policy);
-
+		self.stats.set_policy_index(index);
 		self.broadcast(WorkerEvent::Policy(policy))?;
 
 		Ok(())
@@ -531,8 +516,6 @@ where
 	let (_, object) = objects
 		.remove(&key)
 		.ok_or(CacheError::KeyNotFound)?;
-
-	let mut stats = stats.write().map_err(|_| CacheError::Internal)?;
 
 	stats.decrease_used_size(object.size());
 

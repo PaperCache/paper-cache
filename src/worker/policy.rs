@@ -122,9 +122,7 @@ where
 		stats: StatsRef,
 		policies: Vec<Policy>,
 	) -> Self {
-		let max_cache_size = stats
-			.read().unwrap()
-			.get_max_size();
+		let max_cache_size = stats.get_max_size();
 
 		let policy_stacks = policies
 			.iter()
