@@ -15,4 +15,7 @@ pub mod policy;
 pub use crate::policy::*;
 
 mod object;
-pub use crate::object::MemSize as ObjectMemSize;
+pub use crate::object::{
+	MemSize as ObjectMemSize,
+	ObjectSize,
+};

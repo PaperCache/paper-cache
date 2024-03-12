@@ -13,7 +13,7 @@ where
 }
 
 pub trait MemSize {
-	fn mem_size(&self) -> usize;
+	fn mem_size(&self) -> ObjectSize;
 }
 
 impl<T> Object<T>
@@ -37,7 +37,7 @@ where
 	}
 
 	pub fn size(&self) -> ObjectSize {
-		self.data.mem_size() as ObjectSize
+		self.data.mem_size()
 	}
 
 	pub fn expiry(&self) -> ExpireTime {

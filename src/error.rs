@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub enum CacheError {
 	#[error("The policies cannot be empty.")]
 	EmptyPolicies,
