@@ -1,12 +1,12 @@
 [package]
 name = "paper_cache"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2021"
 
 [dependencies]
 rustc-hash = "1.1.0"
 dlv-list = "0.5.2"
-kwik = { git = "https://github.com/KiaShakiba/kwik-rs.git", version = "0.1.0" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.0.0" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.1.0" }
 thiserror = "1.0.57"
 dashmap = "5.5.3"
