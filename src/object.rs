@@ -44,6 +44,10 @@ where
 		self.expiry
 	}
 
+	pub fn is_expired(&self) -> bool {
+		self.expiry.is_some_and(|expiry| expiry <= utils::timestamp())
+	}
+
 	pub fn expires(&mut self, ttl: Option<u32>) {
 		self.expiry = match ttl {
 			Some(0) | None => None,

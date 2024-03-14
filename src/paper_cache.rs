@@ -149,7 +149,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.2");
+	/// assert_eq!(cache.version(), "1.2.4");
 	///
 	/// struct Object;
 	///
@@ -208,12 +208,12 @@ where
 	/// ```
 	pub fn get(&self, key: K) -> Result<Arc<V>, CacheError> {
 		let result = match self.objects.get(&key) {
-			Some(entry) => {
+			Some(object) if !object.is_expired() => {
 				self.stats.hit();
-				Ok(entry.data())
+				Ok(object.data())
 			},
 
-			None => {
+			_ => {
 				self.stats.miss();
 				Err(CacheError::KeyNotFound)
 			},
@@ -322,7 +322,7 @@ where
 	/// }
 	/// ```
 	pub fn has(&self, key: K) -> bool {
-		self.objects.contains_key(&key)
+		self.objects.get(&key).is_some_and(|object| !object.is_expired())
 	}
 
 	/// Gets (peeks) the value associated with the supplied key without altering
@@ -356,9 +356,10 @@ where
 	/// }
 	/// ```
 	pub fn peek(&self, key: K) -> Result<Arc<V>, CacheError> {
-		self.objects.get(&key)
-			.map(|object| object.data())
-			.ok_or(CacheError::KeyNotFound)
+		match self.objects.get(&key) {
+			Some(object) if !object.is_expired() => Ok(object.data()),
+			_ => Err(CacheError::KeyNotFound),
+		}
 	}
 
 	/// Sets the TTL associated with the supplied key.
@@ -380,8 +381,10 @@ where
 	/// }
 	/// ```
 	pub fn ttl(&self, key: K, ttl: Option<u32>) -> Result<(), CacheError> {
-		let mut object = self.objects.get_mut(&key)
-			.ok_or(CacheError::KeyNotFound)?;
+		let mut object = match self.objects.get_mut(&key) {
+			Some(object) if !object.is_expired() => object,
+			_ => return Err(CacheError::KeyNotFound),
+		};
 
 		let old_expiry = object.expiry();
 		object.expires(ttl);
@@ -415,7 +418,7 @@ where
 	/// }
 	/// ```
 	pub fn size(&self, key: K) -> Result<ObjectSize, CacheError> {
-		self.get(key).map(|value| value.mem_size())
+		self.peek(key).map(|value| value.mem_size())
 	}
 
 	/// Deletes all objects in the cache and sets the cache's used size to zero.
@@ -545,7 +548,10 @@ where
 
 	stats.decrease_used_size(object.size());
 
-	Ok(object)
+	match !object.is_expired() {
+		true => Ok(object),
+		false => Err(CacheError::KeyNotFound),
+	}
 }
 
 unsafe impl<K, V, S> Send for PaperCache<K, V, S>
