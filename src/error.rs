@@ -2,8 +2,11 @@ use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
 pub enum CacheError {
-	#[error("The policies cannot be empty.")]
+	#[error("At least one policy must be configured.")]
 	EmptyPolicies,
+
+	#[error("Duplicate policies were configured.")]
+	DuplicatePolicies,
 
 	#[error("The supplied policy is not one of the cache's configured policies.")]
 	UnconfiguredPolicy,

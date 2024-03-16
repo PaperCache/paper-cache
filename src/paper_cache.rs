@@ -68,7 +68,10 @@ where
 	/// assert!(PaperCache::<u32, Object>::new(0, &[Policy::Lru]).is_err());
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(0, &[]).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(10, &[]).is_err());
+	///
+	/// // Supplying duplicate policies will return a CacheError.
+	/// assert!(PaperCache::<u32, Object>::new(10, &[Policy::Lru, Policy::Fifo, Policy::Lru]).is_err());
 	///
 	/// struct Object;
 	///
@@ -112,6 +115,10 @@ where
 			return Err(CacheError::EmptyPolicies);
 		}
 
+		if has_duplicate_policies(policies) {
+			return Err(CacheError::DuplicatePolicies);
+		}
+
 		let objects = Arc::new(DashMap::with_hasher(hasher));
 		let stats = Arc::new(AtomicStats::new(max_size, 0));
 
@@ -149,7 +156,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.4");
+	/// assert_eq!(cache.version(), "1.2.5");
 	///
 	/// struct Object;
 	///
@@ -552,6 +559,18 @@ where
 		true => Ok(object),
 		false => Err(CacheError::KeyNotFound),
 	}
+}
+
+fn has_duplicate_policies(policies: &[Policy]) -> bool {
+	policies
+		.iter()
+		.enumerate()
+		.any(|(index, policy)| {
+			policies
+				.iter()
+				.skip(index + 1)
+				.any(|other| policy.eq(other))
+		})
 }
 
 unsafe impl<K, V, S> Send for PaperCache<K, V, S>
