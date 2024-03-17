@@ -20,8 +20,7 @@ use crate::{
 		Worker,
 		WorkerSender,
 		WorkerEvent,
-		PolicyWorker,
-		TtlWorker,
+		WorkerManager,
 	},
 };
 
@@ -41,7 +40,7 @@ where
 	stats: StatsRef,
 
 	policies: Arc<Box<[Policy]>>,
-	workers: Arc<Box<[WorkerSender<K>]>>,
+	worker_manager: Arc<WorkerSender<K>>,
 }
 
 impl<K, V, S> PaperCache<K, V, S>
@@ -122,28 +121,23 @@ where
 		let objects = Arc::new(DashMap::with_hasher(hasher));
 		let stats = Arc::new(AtomicStats::new(max_size, 0));
 
-		let (policy_worker, policy_listener) = unbounded();
-		let (ttl_worker, ttl_listener) = unbounded();
+		let (worker_sender, worker_listener) = unbounded();
 
-		register_worker(PolicyWorker::<K, V, S>::new(
-			policy_listener,
+		let mut worker_manager = WorkerManager::new(
+			worker_listener,
 			objects.clone(),
 			stats.clone(),
-			policies.into(),
-		));
+			policies,
+		);
 
-		register_worker(TtlWorker::<K, V, S>::new(
-			ttl_listener,
-			objects.clone(),
-			stats.clone(),
-		));
+		thread::spawn(move || worker_manager.run());
 
 		let cache = PaperCache {
 			objects,
 			stats,
 
 			policies: Arc::new(policies.into()),
-			workers: Arc::new(Box::new([policy_worker, ttl_worker])),
+			worker_manager: Arc::new(worker_sender),
 		};
 
 		Ok(cache)
@@ -156,7 +150,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.5");
+	/// assert_eq!(cache.version(), "1.2.7");
 	///
 	/// struct Object;
 	///
@@ -521,22 +515,9 @@ where
 	}
 
 	fn broadcast(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
-		for worker in self.workers.iter() {
-			worker.send(event.clone()).map_err(|_| CacheError::Internal)?;
-		}
-
+		self.worker_manager.send(event).map_err(|_| CacheError::Internal)?;
 		Ok(())
 	}
-}
-
-/// Registers a new background worker which implements [`Worker`].
-fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
-where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
-	S: Default + Clone + BuildHasher,
-{
-	thread::spawn(move || worker.run());
 }
 
 pub fn erase<K, V, S>(

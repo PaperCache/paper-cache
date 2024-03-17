@@ -1,3 +1,4 @@
+mod manager;
 mod policy;
 mod ttl;
 
@@ -6,6 +7,7 @@ use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
 	paper_cache::CacheSize,
+	error::CacheError,
 	object::{MemSize, ObjectSize, ExpireTime},
 	policy::Policy,
 };
@@ -34,10 +36,11 @@ where
 	V: 'static + Sync + MemSize,
 	S: Default + Clone + BuildHasher,
 {
-	fn run(&mut self);
+	fn run(&mut self) -> Result<(), CacheError>;
 }
 
 pub use crate::worker::{
+	manager::WorkerManager,
 	policy::PolicyWorker,
 	ttl::TtlWorker,
 };

@@ -9,6 +9,7 @@ use kwik::utils;
 
 use crate::{
 	paper_cache::{CacheSize, ObjectMapRef, StatsRef, erase},
+	error::CacheError,
 	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},
 	policy::{Policy, PolicyStack, PolicyStackType},
@@ -41,7 +42,7 @@ where
 	V: 'static + Sync + MemSize,
 	S: Default + Clone + BuildHasher,
 {
-	fn run(&mut self) {
+	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
 			let events = self.listener
 				.try_iter()
@@ -127,7 +128,7 @@ where
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
-		policies: Vec<Policy>,
+		policies: &[Policy],
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
