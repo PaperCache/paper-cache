@@ -1,12 +1,7 @@
 use std::hash::Hash;
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
-
-use crate::{
-	paper_cache::CacheSize,
-	object::ObjectSize,
-	policy::policy_stack::PolicyStack,
-};
+use crate::policy::policy_stack::PolicyStack;
 
 pub struct LfuStack<K>
 where
@@ -14,30 +9,23 @@ where
 {
 	index_map: FxHashMap<K, KeyIndex<K>>,
 	count_lists: VecList<CountList<K>>,
-
-	used_cache_size: CacheSize,
-}
-
-struct LfuObject<K> {
-	key: K,
-	size: ObjectSize,
 }
 
 struct CountList<K> {
 	count: u64,
-	list: VecList<LfuObject<K>>,
+	list: VecList<K>,
 }
 
 struct KeyIndex<K> {
 	count_list_index: Index<CountList<K>>,
-	list_index: Index<LfuObject<K>>,
+	list_index: Index<K>,
 }
 
 impl<K> PolicyStack<K> for LfuStack<K>
 where
 	K: Copy + Eq + Hash,
 {
-	fn insert(&mut self, key: K, size: ObjectSize) {
+	fn insert(&mut self, key: K) {
 		if self.index_map.contains_key(&key) {
 			return self.update(key);
 		}
@@ -49,14 +37,12 @@ where
 		let count_list_index = self.count_lists.front_index().unwrap();
 		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
 
-		let list_index = count_list.push(LfuObject::new(key, size));
+		let list_index = count_list.push(key);
 
 		self.index_map.insert(key, KeyIndex::new(
 			count_list_index,
 			list_index,
 		));
-
-		self.used_cache_size += size;
 	}
 
 	fn update(&mut self, key: K) {
@@ -68,14 +54,14 @@ where
 		let prev_count_list = self.count_lists.get_mut(prev_count_list_index).unwrap();
 		let prev_count = prev_count_list.count;
 
-		let object = prev_count_list.remove(key_index.list_index);
+		prev_count_list.remove(key_index.list_index);
 		let prev_is_empty = prev_count_list.is_empty();
 
 		if let Some(next_count_list_index) = self.count_lists.get_next_index(prev_count_list_index) {
 			let next_count_list = self.count_lists.get_mut(next_count_list_index).unwrap();
 
 			if next_count_list.count == prev_count + 1 {
-				let list_index = next_count_list.push(object);
+				let list_index = next_count_list.push(key);
 
 				self.index_map.insert(key, KeyIndex::new(
 					next_count_list_index,
@@ -92,7 +78,7 @@ where
 
 		let mut count_list = CountList::<K>::new(prev_count + 1);
 
-		let list_index = count_list.push(object);
+		let list_index = count_list.push(key);
 		let count_list_index = self.count_lists.insert_after(prev_count_list_index, count_list);
 
 		self.index_map.insert(key, KeyIndex::new(
@@ -111,9 +97,7 @@ where
 		};
 
 		let count_list = self.count_lists.get_mut(key_index.count_list_index).unwrap();
-		let object = count_list.remove(key_index.list_index);
-
-		self.used_cache_size -= object.size;
+		count_list.remove(key_index.list_index);
 
 		if count_list.is_empty() {
 			self.count_lists.remove(key_index.count_list_index);
@@ -123,28 +107,20 @@ where
 	fn clear(&mut self) {
 		self.index_map.clear();
 		self.count_lists.clear();
-
-		self.used_cache_size = 0;
 	}
 
-	fn eviction(&mut self, max_cache_size: CacheSize) -> Option<K> {
-		if self.used_cache_size <= max_cache_size {
-			return None;
-		}
-
+	fn eviction(&mut self) -> Option<K> {
 		let count_list_index = self.count_lists.front_index()?;
 		let count_list = self.count_lists.get_mut(count_list_index)?;
 
-		let object = count_list.pop();
-
-		self.index_map.remove(&object.key);
-		self.used_cache_size -= object.size;
+		let key = count_list.pop();
+		self.index_map.remove(&key);
 
 		if count_list.is_empty() {
 			self.count_lists.remove(count_list_index);
 		}
 
-		Some(object.key)
+		Some(key)
 	}
 }
 
@@ -160,25 +136,16 @@ impl<K> CountList<K> {
 		self.list.is_empty()
 	}
 
-	fn push(&mut self, object: LfuObject<K>) -> Index<LfuObject<K>> {
-		self.list.push_front(object)
+	fn push(&mut self, key: K) -> Index<K> {
+		self.list.push_front(key)
 	}
 
-	fn pop(&mut self) -> LfuObject<K> {
+	fn pop(&mut self) -> K {
 		self.list.pop_back().unwrap()
 	}
 
-	fn remove(&mut self, index: Index<LfuObject<K>>) -> LfuObject<K> {
-		self.list.remove(index).unwrap()
-	}
-}
-
-impl<K> LfuObject<K> {
-	fn new(key: K, size: ObjectSize) -> Self {
-		LfuObject {
-			key,
-			size,
-		}
+	fn remove(&mut self, index: Index<K>) {
+		self.list.remove(index).unwrap();
 	}
 }
 
@@ -190,8 +157,6 @@ where
 		LfuStack {
 			index_map: FxHashMap::default(),
 			count_lists: VecList::default(),
-
-			used_cache_size: 0,
 		}
 	}
 }
@@ -199,7 +164,7 @@ where
 impl<K> KeyIndex<K> {
 	fn new(
 		count_list_index: Index<CountList<K>>,
-		list_index: Index<LfuObject<K>>,
+		list_index: Index<K>,
 	) -> Self {
 		KeyIndex {
 			count_list_index,
@@ -220,12 +185,12 @@ mod tests {
 		let mut stack = LfuStack::<u32>::default();
 
 		for access in accesses {
-			stack.insert(access, 1);
+			stack.insert(access);
 		}
 
 		let mut eviction_count = 0;
 
-		while let Some(key) = stack.eviction(0) {
+		while let Some(key) = stack.eviction() {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
 				None => assert!(false),

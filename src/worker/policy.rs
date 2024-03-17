@@ -10,7 +10,7 @@ use kwik::utils;
 use crate::{
 	paper_cache::{CacheSize, ObjectMapRef, StatsRef, erase},
 	error::CacheError,
-	object::{MemSize, ObjectSize},
+	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},
 	policy::{Policy, PolicyStack, PolicyStackType},
 };
@@ -27,7 +27,7 @@ where
 	stats: StatsRef,
 
 	max_cache_size: CacheSize,
-
+	used_cache_size: CacheSize,
 	policy_stacks: Vec<PolicyStackType<K>>,
 	policy_index: usize,
 
@@ -53,13 +53,27 @@ where
 				match event {
 					WorkerEvent::Get(key) => self.handle_get(key),
 
-					WorkerEvent::Set(key, size, _) => {
+					WorkerEvent::Set(key, size, _, old_size) => {
 						has_current_set = true;
-						self.handle_set(key, size);
+
+						self.used_cache_size += size;
+
+						if let Some(old_size) = old_size {
+							self.used_cache_size -= old_size;
+						}
+
+						self.handle_set(key);
 					},
 
-					WorkerEvent::Del(key, _) => self.handle_del(key),
-					WorkerEvent::Wipe => self.handle_wipe(),
+					WorkerEvent::Del(key, size, _) => {
+						self.used_cache_size -= size;
+						self.handle_del(key);
+					},
+
+					WorkerEvent::Wipe => {
+						self.used_cache_size = 0;
+						self.handle_wipe();
+					},
 
 					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
 
@@ -77,9 +91,13 @@ where
 			let policy_stack = &mut self.policy_stacks[self.policy_index];
 			let mut evicted_keys = Vec::<K>::new();
 
-			while let Some(key) = policy_stack.eviction(self.max_cache_size) {
-				erase(&self.objects, &self.stats, key).ok();
-				evicted_keys.push(key);
+			while self.used_cache_size > self.max_cache_size {
+				if let Some(key) = policy_stack.eviction() {
+					if let Ok(object) = erase(&self.objects, &self.stats, key) {
+						self.used_cache_size -= object.size();
+						evicted_keys.push(key);
+					}
+				}
 			}
 
 			for key in evicted_keys {
@@ -139,6 +157,7 @@ where
 			stats,
 
 			max_cache_size,
+			used_cache_size: 0,
 
 			policy_stacks,
 			policy_index,
@@ -153,9 +172,9 @@ where
 		}
 	}
 
-	fn handle_set(&mut self, key: K, size: ObjectSize) {
+	fn handle_set(&mut self, key: K) {
 		for policy_stack in self.policy_stacks.iter_mut() {
-			policy_stack.insert(key, size);
+			policy_stack.insert(key);
 		}
 	}
 

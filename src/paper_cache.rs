@@ -261,13 +261,17 @@ where
 
 		self.stats.set();
 
-		if let Some(old_object) = self.objects.insert(key, object) {
-			self.stats.decrease_used_size(old_object.size());
-		}
+		let old_object_size = self.objects
+			.insert(key, object)
+			.map(|old_object| old_object.size());
 
 		self.stats.increase_used_size(size);
 
-		self.broadcast(WorkerEvent::Set(key, size, expiry))?;
+		if let Some(old_object_size) = old_object_size {
+			self.stats.decrease_used_size(old_object_size);
+		}
+
+		self.broadcast(WorkerEvent::Set(key, size, expiry, old_object_size))?;
 
 		Ok(())
 	}
@@ -297,7 +301,7 @@ where
 		let object = erase(&self.objects, &self.stats, key)?;
 
 		self.stats.del();
-		self.broadcast(WorkerEvent::Del(key, object.expiry()))?;
+		self.broadcast(WorkerEvent::Del(key, object.size(), object.expiry()))?;
 
 		Ok(())
 	}

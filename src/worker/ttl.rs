@@ -41,8 +41,8 @@ where
 
 			for event in self.listener.try_iter() {
 				match event {
-					WorkerEvent::Set(key, _, expiry) => self.expiries.insert(key, expiry),
-					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
+					WorkerEvent::Set(key, _, expiry, _) => self.expiries.insert(key, expiry),
+					WorkerEvent::Del(key, _, expiry) => self.expiries.remove(key, expiry),
 
 					WorkerEvent::Ttl(key, old_expiry, new_expiry) => {
 						self.expiries.remove(key, old_expiry);

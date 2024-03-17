@@ -4,24 +4,19 @@ mod mru_stack;
 mod fifo_stack;
 
 use std::hash::Hash;
-
-use crate::{
-	paper_cache::CacheSize,
-	object::ObjectSize,
-	policy::Policy,
-};
+use crate::policy::Policy;
 
 pub trait PolicyStack<K>
 where
 	K: Copy + Eq + Hash,
 {
-	fn insert(&mut self, key: K, size: ObjectSize);
+	fn insert(&mut self, key: K);
 	fn update(&mut self, _: K) {}
 	fn remove(&mut self, key: K);
 
 	fn clear(&mut self);
 
-	fn eviction(&mut self, max_cache_size: CacheSize) -> Option<K>;
+	fn eviction(&mut self) -> Option<K>;
 }
 
 pub enum PolicyStackType<K>
@@ -38,12 +33,12 @@ impl<K> PolicyStack<K> for PolicyStackType<K>
 where
 	K: Copy + Eq + Hash,
 {
-	fn insert(&mut self, key: K, size: ObjectSize) {
+	fn insert(&mut self, key: K) {
 		match self {
-			PolicyStackType::Lfu(stack) => stack.insert(key, size),
-			PolicyStackType::Fifo(stack) => stack.insert(key, size),
-			PolicyStackType::Lru(stack) => stack.insert(key, size),
-			PolicyStackType::Mru(stack) => stack.insert(key, size),
+			PolicyStackType::Lfu(stack) => stack.insert(key),
+			PolicyStackType::Fifo(stack) => stack.insert(key),
+			PolicyStackType::Lru(stack) => stack.insert(key),
+			PolicyStackType::Mru(stack) => stack.insert(key),
 		}
 	}
 
@@ -74,12 +69,12 @@ where
 		}
 	}
 
-	fn eviction(&mut self, max_cache_size: CacheSize) -> Option<K> {
+	fn eviction(&mut self) -> Option<K> {
 		match self {
-			PolicyStackType::Lfu(stack) => stack.eviction(max_cache_size),
-			PolicyStackType::Fifo(stack) => stack.eviction(max_cache_size),
-			PolicyStackType::Lru(stack) => stack.eviction(max_cache_size),
-			PolicyStackType::Mru(stack) => stack.eviction(max_cache_size),
+			PolicyStackType::Lfu(stack) => stack.eviction(),
+			PolicyStackType::Fifo(stack) => stack.eviction(),
+			PolicyStackType::Lru(stack) => stack.eviction(),
+			PolicyStackType::Mru(stack) => stack.eviction(),
 		}
 	}
 }
