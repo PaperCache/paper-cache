@@ -148,10 +148,6 @@ impl AtomicStats {
 		self.used_size.fetch_sub(size, Ordering::Relaxed);
 	}
 
-	pub fn reset_used_size(&self) {
-		self.used_size.store(0, Ordering::Relaxed);
-	}
-
 	pub fn set_policy_index(&self, policy_index: usize) {
 		self.policy_index.store(policy_index, Ordering::Relaxed);
 	}
@@ -169,6 +165,15 @@ impl AtomicStats {
 	#[must_use]
 	pub fn target_used_size_to_fit(&self, size: u64) -> u64 {
 		self.max_size.load(Ordering::Relaxed) - size
+	}
+
+	pub fn clear(&self) {
+		self.used_size.store(0, Ordering::Relaxed);
+
+		self.total_hits.store(0, Ordering::Relaxed);
+		self.total_gets.store(0, Ordering::Relaxed);
+		self.total_sets.store(0, Ordering::Relaxed);
+		self.total_dels.store(0, Ordering::Relaxed);
 	}
 
 	#[must_use]

@@ -150,7 +150,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.8");
+	/// assert_eq!(cache.version(), "1.2.9");
 	///
 	/// struct Object;
 	///
@@ -440,8 +440,8 @@ where
 	/// ```
 	pub fn wipe(&self) -> Result<(), CacheError> {
 		self.objects.clear();
+		self.stats.clear();
 
-		self.stats.reset_used_size();
 		self.broadcast(WorkerEvent::Wipe)?;
 
 		Ok(())
