@@ -150,7 +150,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.7");
+	/// assert_eq!(cache.version(), "1.2.8");
 	///
 	/// struct Object;
 	///
@@ -515,7 +515,9 @@ where
 	}
 
 	fn broadcast(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
-		self.worker_manager.send(event).map_err(|_| CacheError::Internal)?;
+		self.worker_manager.try_send(event)
+			.map_err(|_| CacheError::Internal)?;
+
 		Ok(())
 	}
 }
