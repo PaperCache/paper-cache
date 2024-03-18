@@ -150,7 +150,7 @@ where
 	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
 	///
 	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.9");
+	/// assert_eq!(cache.version(), "1.2.10");
 	///
 	/// struct Object;
 	///

@@ -54,6 +54,7 @@ where
 					WorkerEvent::Get(key) => self.handle_get(key),
 
 					WorkerEvent::Set(key, size, _, old_size) => {
+						self.handle_set(key);
 						has_current_set = true;
 
 						self.used_cache_size += size;
@@ -61,18 +62,16 @@ where
 						if let Some(old_size) = old_size {
 							self.used_cache_size -= old_size;
 						}
-
-						self.handle_set(key);
 					},
 
 					WorkerEvent::Del(key, size, _) => {
-						self.used_cache_size -= size;
 						self.handle_del(key);
+						self.used_cache_size -= size;
 					},
 
 					WorkerEvent::Wipe => {
-						self.used_cache_size = 0;
 						self.handle_wipe();
+						self.used_cache_size = 0;
 					},
 
 					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
