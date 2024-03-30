@@ -61,7 +61,7 @@ where
 				}
 			}
 
-			let delay = match self.expiries.has_within(5) {
+			let delay = match self.expiries.has_within(2) {
 				true => 1,
 				false => 1000,
 			};
