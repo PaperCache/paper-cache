@@ -4,7 +4,7 @@ use std::{
 };
 
 use rustc_hash::FxHashSet;
-use crate::object::ExpireTime;
+use crate::object::{ExpireTime, get_expiry_from_ttl};
 
 pub struct Expiries<K>
 where
@@ -17,8 +17,12 @@ impl<K> Expiries<K>
 where
 	K: Copy + Eq + Hash,
 {
-	pub fn is_empty(&self) -> bool {
-		self.map.is_empty()
+	pub fn has_within(&self, ttl: u32) -> bool {
+		let Some((nearest_expiry, _)) = self.map.first_key_value() else {
+			return false;
+		};
+
+		*nearest_expiry <= get_expiry_from_ttl(ttl)
 	}
 
 	pub fn insert(&mut self, key: K, expiry: ExpireTime) {

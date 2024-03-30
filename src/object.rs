@@ -23,7 +23,7 @@ where
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
 		let expiry = match ttl {
 			Some(0) | None => None,
-			Some(ttl) => Some(utils::timestamp() + u64::from(ttl) * 1000),
+			Some(ttl) => Some(get_expiry_from_ttl(ttl)),
 		};
 
 		Object {
@@ -54,4 +54,8 @@ where
 			Some(ttl) => Some(utils::timestamp() + u64::from(ttl) * 1000),
 		};
 	}
+}
+
+pub fn get_expiry_from_ttl(ttl: u32) -> u64 {
+	utils::timestamp() + u64::from(ttl) * 1000
 }

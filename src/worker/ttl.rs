@@ -61,9 +61,9 @@ where
 				}
 			}
 
-			let delay = match self.expiries.is_empty() {
-				true => 1000,
-				false => 1,
+			let delay = match self.expiries.has_within(5) {
+				true => 1,
+				false => 1000,
 			};
 
 			thread::sleep(Duration::from_millis(delay));
