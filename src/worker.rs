@@ -6,10 +6,10 @@ use std::hash::{Hash, BuildHasher};
 use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
-	paper_cache::CacheSize,
+	cache::CacheSize,
 	error::CacheError,
 	object::{MemSize, ObjectSize, ExpireTime},
-	policy::Policy,
+	policy::PaperPolicy,
 };
 
 pub type WorkerSender<K> = Sender<WorkerEvent<K>>;
@@ -26,7 +26,7 @@ pub enum WorkerEvent<K> {
 	Wipe,
 
 	Resize(CacheSize),
-	Policy(Policy),
+	Policy(PaperPolicy),
 }
 
 pub trait Worker<K, V, S>

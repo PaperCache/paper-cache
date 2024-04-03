@@ -14,7 +14,7 @@ use crossbeam_channel::unbounded;
 use crate::{
 	object::{Object, MemSize, ObjectSize},
 	stats::{AtomicStats, Stats},
-	policy::Policy,
+	policy::PaperPolicy,
 	error::CacheError,
 	worker::{
 		Worker,
@@ -39,7 +39,7 @@ where
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
 
-	policies: Arc<Box<[Policy]>>,
+	policies: Arc<Box<[PaperPolicy]>>,
 	worker_manager: Arc<WorkerSender<K>>,
 }
 
@@ -59,18 +59,18 @@ where
 	/// # Examples
 	///
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// assert!(PaperCache::<u32, Object>::new(100, &[Policy::Lru]).is_ok());
+	/// assert!(PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lru]).is_ok());
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(0, &[Policy::Lru]).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(0, &[PaperPolicy::Lru]).is_err());
 	///
 	/// // Supplying an empty policies slice will return a CacheError.
 	/// assert!(PaperCache::<u32, Object>::new(10, &[]).is_err());
 	///
 	/// // Supplying duplicate policies will return a CacheError.
-	/// assert!(PaperCache::<u32, Object>::new(10, &[Policy::Lru, Policy::Fifo, Policy::Lru]).is_err());
+	/// assert!(PaperCache::<u32, Object>::new(10, &[PaperPolicy::Lru, PaperPolicy::Fifo, PaperPolicy::Lru]).is_err());
 	///
 	/// struct Object;
 	///
@@ -80,7 +80,7 @@ where
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		policies: &[Policy],
+		policies: &[PaperPolicy],
 	) -> Result<Self, CacheError> {
 		Self::with_hasher(max_size, policies, Default::default())
 	}
@@ -91,9 +91,9 @@ where
 	///
 	/// ```
 	/// use std::collections::hash_map::RandomState;
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// assert!(PaperCache::<u32, Object>::with_hasher(100, &[Policy::Lru], RandomState::default()).is_ok());
+	/// assert!(PaperCache::<u32, Object>::with_hasher(100, &[PaperPolicy::Lru], RandomState::default()).is_ok());
 	///
 	/// struct Object;
 	///
@@ -103,7 +103,7 @@ where
 	/// ```
 	pub fn with_hasher(
 		max_size: CacheSize,
-		policies: &[Policy],
+		policies: &[PaperPolicy],
 		hasher: S,
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
@@ -125,8 +125,8 @@ where
 
 		let mut worker_manager = WorkerManager::new(
 			worker_listener,
-			objects.clone(),
-			stats.clone(),
+			&objects,
+			&stats,
 			policies,
 		);
 
@@ -147,10 +147,10 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
-	/// assert_eq!(cache.version(), "1.2.10");
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
+	/// assert_eq!(cache.version(), env!("CARGO_PKG_VERSION"));
 	///
 	/// struct Object;
 	///
@@ -167,9 +167,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
@@ -181,8 +181,9 @@ where
 	///     fn mem_size(&self) -> ObjectSize { 4 }
 	/// }
 	/// ```
+	#[must_use]
 	pub fn stats(&self) -> Stats {
-		self.stats.to_stats(self.policies.clone())
+		self.stats.to_stats(&self.policies)
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -190,9 +191,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
@@ -234,9 +235,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// assert!(cache.set(0, Object, None).is_ok());
 	///
@@ -281,9 +282,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	/// assert!(cache.del(0).is_ok());
@@ -311,9 +312,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
@@ -336,9 +337,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(8, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(8, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	/// cache.set(1, Object, None);
@@ -372,9 +373,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(8, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(8, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None); // value will not expire
 	/// cache.ttl(0, Some(5)); // value will expire in 5 seconds
@@ -405,9 +406,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// cache.set(0, Object, None);
 	///
@@ -431,9 +432,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	/// cache.wipe();
 	///
 	/// struct Object;
@@ -456,9 +457,9 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lfu]).unwrap();
 	///
 	/// assert!(cache.resize(1).is_ok());
 	///
@@ -488,14 +489,14 @@ where
 	///
 	/// # Examples
 	/// ```
-	/// use paper_cache::{PaperCache, Policy, ObjectMemSize, ObjectSize};
+	/// use paper_cache::{PaperCache, PaperPolicy, ObjectMemSize, ObjectSize};
 	///
-	/// let mut cache = PaperCache::<u32, Object>::new(100, &[Policy::Lru]).unwrap();
+	/// let mut cache = PaperCache::<u32, Object>::new(100, &[PaperPolicy::Lru]).unwrap();
 	///
-	/// assert!(cache.policy(Policy::Lru).is_ok());
+	/// assert!(cache.policy(PaperPolicy::Lru).is_ok());
 	///
 	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
-	/// assert!(cache.policy(Policy::Mru).is_err());
+	/// assert!(cache.policy(PaperPolicy::Mru).is_err());
 	///
 	/// struct Object;
 	///
@@ -503,7 +504,7 @@ where
 	///     fn mem_size(&self) -> ObjectSize { 4 }
 	/// }
 	/// ```
-	pub fn policy(&self, policy: Policy) -> Result<(), CacheError> {
+	pub fn policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
 		let index = self.policies
 			.iter()
 			.position(|stored_policy| stored_policy.eq(&policy));
@@ -548,7 +549,7 @@ where
 	}
 }
 
-fn has_duplicate_policies(policies: &[Policy]) -> bool {
+fn has_duplicate_policies(policies: &[PaperPolicy]) -> bool {
 	policies
 		.iter()
 		.enumerate()

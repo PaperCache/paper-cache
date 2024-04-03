@@ -6,8 +6,8 @@ use std::sync::{
 };
 
 use crate::{
-	Policy,
-	paper_cache::{CacheSize, AtomicCacheSize},
+	PaperPolicy,
+	cache::{CacheSize, AtomicCacheSize},
 };
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub struct Stats {
 	total_sets: u64,
 	total_dels: u64,
 
-	policy: Policy,
+	policy: PaperPolicy,
 
 	start_time: u64,
 }
@@ -83,7 +83,7 @@ impl Stats {
 
 	/// Returns the cache's current eviction policy index.
 	#[must_use]
-	pub fn get_policy(&self) -> Policy {
+	pub fn get_policy(&self) -> PaperPolicy {
 		self.policy
 	}
 
@@ -177,7 +177,7 @@ impl AtomicStats {
 	}
 
 	#[must_use]
-	pub fn to_stats(&self, policies: Arc<Box<[Policy]>>) -> Stats {
+	pub fn to_stats(&self, policies: &Arc<Box<[PaperPolicy]>>) -> Stats {
 		Stats {
 			max_size: self.get_max_size(),
 			used_size: self.used_size.load(Ordering::Relaxed),

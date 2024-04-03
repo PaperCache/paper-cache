@@ -7,7 +7,7 @@ use std::{
 use kwik::utils;
 
 use crate::{
-	paper_cache::{ObjectMapRef, StatsRef, erase},
+	cache::{ObjectMapRef, StatsRef, erase},
 	error::CacheError,
 	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},

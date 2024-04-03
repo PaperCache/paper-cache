@@ -4,7 +4,7 @@ mod mru_stack;
 mod fifo_stack;
 
 use std::hash::Hash;
-use crate::policy::Policy;
+use crate::policy::PaperPolicy;
 
 pub trait PolicyStack<K>
 where
@@ -83,13 +83,14 @@ impl<K> PolicyStackType<K>
 where
 	K: Copy + Eq + Hash,
 {
-	pub fn is_policy(&self, policy: Policy) -> bool {
+	#[must_use]
+	pub fn is_policy(&self, policy: PaperPolicy) -> bool {
 		matches!(
 			(policy, self),
-			(Policy::Lfu, PolicyStackType::Lfu(_))
-			| (Policy::Fifo, PolicyStackType::Fifo(_))
-			| (Policy::Lru, PolicyStackType::Lru(_))
-			| (Policy::Mru, PolicyStackType::Mru(_))
+			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))
+			| (PaperPolicy::Fifo, PolicyStackType::Fifo(_))
+			| (PaperPolicy::Lru, PolicyStackType::Lru(_))
+			| (PaperPolicy::Mru, PolicyStackType::Mru(_))
 		)
 	}
 }

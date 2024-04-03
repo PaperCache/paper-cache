@@ -8,10 +8,10 @@ use std::{
 use crossbeam_channel::unbounded;
 
 use crate::{
-	paper_cache::{ObjectMapRef, StatsRef},
+	cache::{ObjectMapRef, StatsRef},
 	error::CacheError,
 	object::MemSize,
-	policy::Policy,
+	policy::PaperPolicy,
 	worker::{
 		Worker,
 		WorkerSender,
@@ -63,9 +63,9 @@ where
 {
 	pub fn new(
 		listener: WorkerReceiver<K>,
-		objects: ObjectMapRef<K, V, S>,
-		stats: StatsRef,
-		policies: &[Policy],
+		objects: &ObjectMapRef<K, V, S>,
+		stats: &StatsRef,
+		policies: &[PaperPolicy],
 	) -> Self {
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();

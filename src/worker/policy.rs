@@ -8,11 +8,11 @@ use crossbeam_channel::Receiver;
 use kwik::utils;
 
 use crate::{
-	paper_cache::{CacheSize, ObjectMapRef, StatsRef, erase},
+	cache::{CacheSize, ObjectMapRef, StatsRef, erase},
 	error::CacheError,
 	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},
-	policy::{Policy, PolicyStack, PolicyStackType},
+	policy::{PaperPolicy, PolicyStack, PolicyStackType},
 };
 
 pub struct PolicyWorker<K, V, S>
@@ -138,7 +138,7 @@ where
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
-		policies: &[Policy],
+		policies: &[PaperPolicy],
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
