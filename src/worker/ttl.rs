@@ -4,7 +4,7 @@ use std::{
 	thread,
 };
 
-use kwik::utils;
+use kwik::time;
 
 use crate::{
 	cache::{ObjectMapRef, StatsRef, erase},
@@ -37,7 +37,7 @@ where
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
-			let now = utils::timestamp();
+			let now = time::timestamp();
 
 			for event in self.listener.try_iter() {
 				match event {

@@ -1,9 +1,9 @@
-use kwik::utils;
-
 use std::sync::{
 	Arc,
 	atomic::{Ordering, AtomicU64, AtomicUsize},
 };
+
+use kwik::time;
 
 use crate::{
 	PaperPolicy,
@@ -90,7 +90,7 @@ impl Stats {
 	/// Returns the cache's current uptime.
 	#[must_use]
 	pub fn get_uptime(&self) -> u64 {
-		utils::timestamp() - self.start_time
+		time::timestamp() - self.start_time
 	}
 }
 
@@ -110,7 +110,7 @@ impl AtomicStats {
 
 			policy_index: AtomicUsize::new(policy_index),
 
-			start_time: AtomicU64::new(utils::timestamp()),
+			start_time: AtomicU64::new(time::timestamp()),
 		}
 	}
 

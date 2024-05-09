@@ -5,7 +5,7 @@ use std::{
 };
 
 use crossbeam_channel::Receiver;
-use kwik::utils;
+use kwik::time;
 
 use crate::{
 	cache::{CacheSize, ObjectMapRef, StatsRef, erase},
@@ -109,7 +109,7 @@ where
 				}
 			}
 
-			let now = utils::timestamp();
+			let now = time::timestamp();
 
 			let has_recent_set = self.last_set_time
 				.is_some_and(|last_set_time| now - last_set_time <= 5000);

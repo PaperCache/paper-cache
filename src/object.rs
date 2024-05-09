@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use kwik::utils;
+use kwik::time;
 
 pub type ObjectSize = u64;
 pub type ExpireTime = Option<u64>;
@@ -45,17 +45,17 @@ where
 	}
 
 	pub fn is_expired(&self) -> bool {
-		self.expiry.is_some_and(|expiry| expiry <= utils::timestamp())
+		self.expiry.is_some_and(|expiry| expiry <= time::timestamp())
 	}
 
 	pub fn expires(&mut self, ttl: Option<u32>) {
 		self.expiry = match ttl {
 			Some(0) | None => None,
-			Some(ttl) => Some(utils::timestamp() + u64::from(ttl) * 1000),
+			Some(ttl) => Some(time::timestamp() + u64::from(ttl) * 1000),
 		};
 	}
 }
 
 pub fn get_expiry_from_ttl(ttl: u32) -> u64 {
-	utils::timestamp() + u64::from(ttl) * 1000
+	time::timestamp() + u64::from(ttl) * 1000
 }
