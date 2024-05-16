@@ -144,7 +144,7 @@ where
 
 		let policy_stacks = policies
 			.iter()
-			.map(|policy| policy.as_policy_stack_type())
+			.map(|policy| policy.into())
 			.collect();
 
 		let policy_index = 0;

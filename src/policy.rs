@@ -11,13 +11,21 @@ pub enum PaperPolicy {
 	Mru,
 }
 
-impl PaperPolicy {
-	#[must_use]
-	pub fn as_policy_stack_type<K>(&self) -> PolicyStackType<K>
-	where
-		K: Copy + Eq + Hash,
-	{
-		match self {
+impl<K> From<PaperPolicy> for PolicyStackType<K>
+where
+	K: Copy + Eq + Hash,
+{
+	fn from(policy: PaperPolicy) -> Self {
+		(&policy).into()
+	}
+}
+
+impl<K> From<&PaperPolicy> for PolicyStackType<K>
+where
+	K: Copy + Eq + Hash,
+{
+	fn from(policy: &PaperPolicy) -> Self {
+		match policy {
 			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
 			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
 			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),
@@ -31,13 +39,7 @@ where
 	K: Copy + Eq + Hash,
 {
 	fn eq(&self, policy_type: &PolicyStackType<K>) -> bool {
-		matches!(
-			(self, policy_type),
-			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))
-			| (PaperPolicy::Fifo, PolicyStackType::Fifo(_))
-			| (PaperPolicy::Lru, PolicyStackType::Lru(_))
-			| (PaperPolicy::Mru, PolicyStackType::Mru(_))
-		)
+		self.eq(&policy_type)
 	}
 }
 
@@ -46,7 +48,13 @@ where
 	K: Copy + Eq + Hash,
 {
 	fn eq(&self, policy_type: &&PolicyStackType<K>) -> bool {
-		self.eq(*policy_type)
+		matches!(
+			(self, policy_type),
+			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))
+			| (PaperPolicy::Fifo, PolicyStackType::Fifo(_))
+			| (PaperPolicy::Lru, PolicyStackType::Lru(_))
+			| (PaperPolicy::Mru, PolicyStackType::Mru(_))
+		)
 	}
 }
 
