@@ -8,6 +8,6 @@ rustc-hash = "1.1.0"
 dlv-list = "0.5.2"
 kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.6.2" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.1.0" }
-thiserror = "1.0.60"
+thiserror = "1.0.61"
 dashmap = "5.5.3"
-crossbeam-channel = "0.5.12"
+crossbeam-channel = "0.5.13"
