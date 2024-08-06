@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 rustc-hash = "2.0.0"
 dlv-list = "0.5.2"
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.7.0" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.8.8" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.1.0" }
-thiserror = "1.0.61"
+thiserror = "1.0.63"
 dashmap = "6.0.1"
 crossbeam-channel = "0.5.13"
