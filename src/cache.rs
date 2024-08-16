@@ -34,7 +34,7 @@ pub struct PaperCache<K, V, S = RandomState>
 where
 	K: 'static + Copy + Eq + Hash + Sync,
 	V: 'static + Sync + MemSize,
-	S: Default + BuildHasher+ Clone,
+	S: Default + BuildHasher + Clone,
 {
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
