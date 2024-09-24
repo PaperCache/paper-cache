@@ -4,27 +4,28 @@ use std::{
 	thread,
 };
 
+use typesize::TypeSize;
 use crossbeam_channel::Receiver;
 use kwik::time;
 
 use crate::{
-	cache::{CacheSize, ObjectMapRef, StatsRef, erase},
+	cache::{CacheSize, ObjectMapRef, StatsRef, OverheadManagerRef, erase},
 	error::CacheError,
-	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},
 	policy::{PaperPolicy, PolicyStack, PolicyStackType},
 };
 
 pub struct PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	listener: Receiver<WorkerEvent<K>>,
 
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
+	overhead_manager: OverheadManagerRef,
 
 	max_cache_size: CacheSize,
 	used_cache_size: CacheSize,
@@ -37,8 +38,8 @@ where
 impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
@@ -92,8 +93,8 @@ where
 
 			while self.used_cache_size > self.max_cache_size {
 				if let Some(key) = policy_stack.eviction() {
-					if let Ok(object) = erase(&self.objects, &self.stats, key) {
-						self.used_cache_size -= object.size();
+					if let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) {
+						self.used_cache_size -= self.overhead_manager.total_size(key, &object);
 						evicted_keys.push(key);
 					}
 				}
@@ -130,14 +131,15 @@ where
 
 impl<K, V, S> PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
+		overhead_manager: OverheadManagerRef,
 		policies: &[PaperPolicy],
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
@@ -154,6 +156,7 @@ where
 
 			objects,
 			stats,
+			overhead_manager,
 
 			max_cache_size,
 			used_cache_size: 0,
@@ -192,7 +195,7 @@ where
 
 unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

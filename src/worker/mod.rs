@@ -3,12 +3,13 @@ mod policy;
 mod ttl;
 
 use std::hash::{Hash, BuildHasher};
+use typesize::TypeSize;
 use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
 	cache::CacheSize,
 	error::CacheError,
-	object::{MemSize, ObjectSize, ExpireTime},
+	object::{ObjectSize, ExpireTime},
 	policy::PaperPolicy,
 };
 
@@ -32,8 +33,8 @@ pub enum WorkerEvent<K> {
 pub trait Worker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError>;

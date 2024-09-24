@@ -5,12 +5,12 @@ use std::{
 	thread,
 };
 
+use typesize::TypeSize;
 use crossbeam_channel::unbounded;
 
 use crate::{
-	cache::{ObjectMapRef, StatsRef},
+	cache::{ObjectMapRef, StatsRef, OverheadManagerRef},
 	error::CacheError,
-	object::MemSize,
 	policy::PaperPolicy,
 	worker::{
 		Worker,
@@ -23,8 +23,8 @@ use crate::{
 
 pub struct WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	listener: WorkerReceiver<K>,
@@ -37,8 +37,8 @@ where
 impl<K, V, S> Worker<K, V, S> for WorkerManager<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
@@ -57,14 +57,15 @@ where
 
 impl<K, V, S> WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
 	pub fn new(
 		listener: WorkerReceiver<K>,
 		objects: &ObjectMapRef<K, V, S>,
 		stats: &StatsRef,
+		overhead_manager: &OverheadManagerRef,
 		policies: &[PaperPolicy],
 	) -> Self {
 		let (policy_worker, policy_listener) = unbounded();
@@ -74,6 +75,7 @@ where
 			policy_listener,
 			objects.clone(),
 			stats.clone(),
+			overhead_manager.clone(),
 			policies,
 		));
 
@@ -81,6 +83,7 @@ where
 			ttl_listener,
 			objects.clone(),
 			stats.clone(),
+			overhead_manager.clone(),
 		));
 
 		WorkerManager {
@@ -95,8 +98,8 @@ where
 
 fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	thread::spawn(move || worker.run());
@@ -104,7 +107,7 @@ where
 
 unsafe impl<K, V, S> Send for WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

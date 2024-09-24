@@ -4,26 +4,27 @@ use std::{
 	thread,
 };
 
+use typesize::TypeSize;
 use kwik::time;
 
 use crate::{
-	cache::{ObjectMapRef, StatsRef, erase},
+	cache::{ObjectMapRef, StatsRef, OverheadManagerRef, erase},
 	error::CacheError,
-	object::MemSize,
 	worker::{Worker, WorkerEvent, WorkerReceiver},
 	expiries::Expiries,
 };
 
 pub struct TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	listener: WorkerReceiver<K>,
 
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
+	overhead_manager: OverheadManagerRef,
 
 	expiries: Expiries<K>,
 }
@@ -31,8 +32,8 @@ where
 impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
@@ -57,7 +58,7 @@ where
 
 			if let Some(expired) = self.expiries.expired(now) {
 				for key in expired {
-					erase(&self.objects, &self.stats, key).ok();
+					erase(&self.objects, &self.stats, &self.overhead_manager, key).ok();
 				}
 			}
 
@@ -73,20 +74,22 @@ where
 
 impl<K, V, S> TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	pub fn new(
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
+		overhead_manager: OverheadManagerRef,
 	) -> Self {
 		TtlWorker {
 			listener,
 
 			objects,
 			stats,
+			overhead_manager,
 
 			expiries: Expiries::default(),
 		}
@@ -95,7 +98,7 @@ where
 
 unsafe impl<K, V, S> Send for TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync,
-	V: 'static + Sync + MemSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

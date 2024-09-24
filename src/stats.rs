@@ -157,16 +157,6 @@ impl AtomicStats {
 		size > self.max_size.load(Ordering::Relaxed)
 	}
 
-	#[must_use]
-	pub fn used_size_exceeds(&self, size: u64) -> bool {
-		self.used_size.load(Ordering::Relaxed) > size
-	}
-
-	#[must_use]
-	pub fn target_used_size_to_fit(&self, size: u64) -> u64 {
-		self.max_size.load(Ordering::Relaxed) - size
-	}
-
 	pub fn clear(&self) {
 		self.used_size.store(0, Ordering::Relaxed);
 

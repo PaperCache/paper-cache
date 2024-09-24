@@ -1,4 +1,7 @@
+pub mod overhead;
+
 use std::sync::Arc;
+use typesize::TypeSize;
 use kwik::time;
 
 pub type ObjectSize = u64;
@@ -6,19 +9,15 @@ pub type ExpireTime = Option<u64>;
 
 pub struct Object<T>
 where
-	T: MemSize,
+	T: TypeSize,
 {
 	data: Arc<T>,
 	expiry: ExpireTime,
 }
 
-pub trait MemSize {
-	fn mem_size(&self) -> ObjectSize;
-}
-
 impl<T> Object<T>
 where
-	T: MemSize,
+	T: TypeSize,
 {
 	pub fn new(data: T, ttl: Option<u32>) -> Self {
 		let expiry = match ttl {
@@ -36,8 +35,8 @@ where
 		self.data.clone()
 	}
 
-	pub fn size(&self) -> ObjectSize {
-		self.data.mem_size()
+	fn total_size(&self) -> ObjectSize {
+		(self.data.get_size() + self.expiry.get_size()) as ObjectSize
 	}
 
 	pub fn expiry(&self) -> ExpireTime {
