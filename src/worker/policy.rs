@@ -339,16 +339,17 @@ where
 			.map_err(|_| CacheError::Internal)?;
 
 		for access in reader {
-			stack.insert(access.key());
-
 			match size_map.entry(access.key()) {
 				Entry::Occupied(o) => {
+					stack.update(access.key());
+
 					let saved_size = o.into_mut();
 					current_size -= *saved_size;
 					*saved_size = access.size();
 				},
 
 				Entry::Vacant(v) => {
+					stack.insert(access.key());
 					v.insert(access.size());
 				},
 			};
