@@ -34,7 +34,7 @@ pub enum WorkerEvent<K> {
 pub trait Worker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {

@@ -26,7 +26,7 @@ use crate::{
 
 pub struct WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -40,7 +40,7 @@ where
 impl<K, V, S> Worker<K, V, S> for WorkerManager<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -60,7 +60,7 @@ where
 
 impl<K, V, S> WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
@@ -69,7 +69,7 @@ where
 		objects: &ObjectMapRef<K, V, S>,
 		stats: &StatsRef,
 		overhead_manager: &OverheadManagerRef,
-		policies: &[PaperPolicy],
+		policy: PaperPolicy,
 	) -> Self {
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();
@@ -82,7 +82,7 @@ where
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
-			policies,
+			policy,
 			traces.clone(),
 		));
 
@@ -117,7 +117,7 @@ where
 
 fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -126,7 +126,7 @@ where
 
 unsafe impl<K, V, S> Send for WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

@@ -31,7 +31,7 @@ const POLL_DELAY: Duration = Duration::from_secs(1);
 
 pub struct TraceWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -52,7 +52,7 @@ pub struct Access<K> {
 impl<K, V, S> Worker<K, V, S> for TraceWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -67,11 +67,14 @@ where
 					WorkerEvent::Get(key, hit) if hit => self.handle_get(key)?,
 					WorkerEvent::Set(key, size, _, _) => self.handle_set(key, size)?,
 					WorkerEvent::Wipe => self.handle_wipe()?,
-					WorkerEvent::Policy(_) => self.handle_policy()?,
 
 					_ => {},
 				}
+
 			}
+
+			self.get_writer()?
+				.flush().map_err(|_| CacheError::Internal)?;
 
 			thread::sleep(POLL_DELAY);
 		}
@@ -80,7 +83,7 @@ where
 
 impl<K, V, S> TraceWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -129,11 +132,6 @@ where
 		self.current_writer = None;
 
 		Ok(())
-	}
-
-	fn handle_policy(&mut self) -> Result<(), CacheError> {
-		self.get_writer()?
-			.flush().map_err(|_| CacheError::Internal)
 	}
 
 	fn get_writer(&mut self) -> Result<&mut BinaryWriter<Access<K>>, CacheError> {
@@ -237,7 +235,7 @@ where
 
 unsafe impl<K, V, S> Send for TraceWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

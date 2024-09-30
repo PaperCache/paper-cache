@@ -39,7 +39,7 @@ pub type OverheadManagerRef = Arc<OverheadManager>;
 
 pub struct PaperCache<K, V, S = RandomState>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + BuildHasher + Clone,
 {
@@ -53,7 +53,7 @@ where
 
 impl<K, V, S> PaperCache<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
@@ -126,7 +126,7 @@ where
 			&objects,
 			&stats,
 			&overhead_manager,
-			policies,
+			policies[0],
 		);
 
 		thread::spawn(move || worker_manager.run());
@@ -470,8 +470,8 @@ pub fn erase<K, V, S>(
 	key: K,
 ) -> Result<Object<V>, CacheError>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
+	K: 'static + Eq + Hash + TypeSize,
+	V: 'static + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	let (_, object) = objects
@@ -500,7 +500,7 @@ fn has_duplicate_policies(policies: &[PaperPolicy]) -> bool {
 
 unsafe impl<K, V, S> Send for PaperCache<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

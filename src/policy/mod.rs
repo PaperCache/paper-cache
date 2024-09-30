@@ -1,4 +1,5 @@
 mod policy_stack;
+mod mini_stack;
 
 use std::hash::Hash;
 pub use crate::policy::policy_stack::PolicyStackType;
@@ -58,4 +59,7 @@ where
 	}
 }
 
-pub use crate::policy::policy_stack::PolicyStack;
+pub use crate::policy::{
+	policy_stack::PolicyStack,
+	mini_stack::MiniStackType,
+};

@@ -20,7 +20,7 @@ use crate::{
 
 pub struct TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -36,7 +36,7 @@ where
 impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -78,7 +78,7 @@ where
 
 impl<K, V, S> TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -102,7 +102,7 @@ where
 
 unsafe impl<K, V, S> Send for TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

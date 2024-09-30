@@ -3,6 +3,7 @@ use std::{
 	sync::{Arc, RwLock},
 	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
+	io::{Seek, SeekFrom},
 	fs::File,
 	collections::{
 		VecDeque,
@@ -11,7 +12,7 @@ use std::{
 };
 
 use typesize::TypeSize;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, unbounded};
 
 use kwik::{
 	time,
@@ -31,12 +32,17 @@ use crate::{
 		WorkerReceiver,
 		trace::Access,
 	},
-	policy::{PaperPolicy, PolicyStack, PolicyStackType},
+	policy::{
+		PaperPolicy,
+		PolicyStack,
+		PolicyStackType,
+		MiniStackType,
+	},
 };
 
 pub struct PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -48,10 +54,11 @@ where
 
 	max_cache_size: CacheSize,
 	used_cache_size: CacheSize,
-	policy_stacks: Vec<PolicyStackType<K>>,
-	policy_index: usize,
-
+	policy_stack: Option<PolicyStackType<K>>,
 	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
+
+	mini_policy_stacks: Box<[MiniStackType<K>]>,
+	mini_policy_index: Option<usize>,
 
 	last_set_time: Option<u64>,
 }
@@ -59,11 +66,19 @@ where
 impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
+		let (
+			policy_reconstruct_tx,
+			policy_reconstruct_rx,
+		) = unbounded::<PolicyStackType<K>>();
+
+		let policy_reconstruct_tx = Arc::new(policy_reconstruct_tx);
+		let mut buffered_events = Vec::<WorkerEvent<K>>::new();
+
 		loop {
 			let events = self.listener
 				.try_iter()
@@ -99,42 +114,99 @@ where
 					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
 
 					WorkerEvent::Policy(policy) => {
-						let _ = reconstruct_policy_stack::<K>(
-							policy,
-							self.max_cache_size,
-							&self.traces,
-						);
-
-						self.policy_index = self.policy_stacks
+						let mini_policy_index = self.mini_policy_stacks
 							.iter()
-							.position(|policy_stack| policy_stack.is_policy(policy))
+							.position(|mini_stack| mini_stack.is_policy(policy))
 							.unwrap_or(0);
+
+						self.policy_stack = None;
+						self.mini_policy_index = Some(mini_policy_index);
+
+						let max_cache_size = self.max_cache_size;
+						let traces = self.traces.clone();
+						let policy_reconstruct_tx = policy_reconstruct_tx.clone();
+
+						thread::spawn(move || {
+							let reconstruction_result = reconstruct_policy_stack::<K>(
+								policy,
+								max_cache_size,
+								traces.clone(),
+							);
+
+							if let Ok(stack) = reconstruction_result {
+								let _ = policy_reconstruct_tx.send(stack);
+							}
+						});
 					},
 
 					_ => {},
 				}
-			}
 
-			let policy_stack = &mut self.policy_stacks[self.policy_index];
-			let mut evicted_keys = Vec::<K>::new();
-
-			while self.used_cache_size > self.max_cache_size {
-				if let Some(key) = policy_stack.pop() {
-					if let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) {
-						self.used_cache_size -= self.overhead_manager.total_size(key, &object);
-						evicted_keys.push(key);
-					}
+				if self.mini_policy_index.is_some() {
+					buffered_events.push(event);
 				}
 			}
 
-			for key in evicted_keys {
-				for (index, policy_stack) in self.policy_stacks.iter_mut().enumerate() {
-					if index == self.policy_index {
-						continue;
+			for mut reconstructed_stack in policy_reconstruct_rx.try_iter() {
+				for event in &buffered_events {
+					match event {
+						WorkerEvent::Get(key, hit) if *hit => reconstructed_stack.update(*key),
+						WorkerEvent::Set(key, _, _, _) => reconstructed_stack.insert(*key),
+						WorkerEvent::Del(key, _, _) => reconstructed_stack.remove(*key),
+						WorkerEvent::Wipe => reconstructed_stack.clear(),
+
+						_ => {},
+					}
+				}
+
+				buffered_events.clear();
+
+				self.policy_stack = Some(reconstructed_stack);
+				self.mini_policy_index = None;
+			}
+
+			match (self.policy_stack.as_mut(), self.mini_policy_index) {
+				(Some(policy_stack), None) => {
+					while self.used_cache_size > self.max_cache_size {
+						if let Some(key) = policy_stack.pop() {
+							if let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) {
+								self.used_cache_size -= self.overhead_manager.total_size(key, &object);
+							}
+						}
+					}
+				},
+
+				(None, Some(mini_policy_index)) => {
+					let mini_policy_stack = &mut self.mini_policy_stacks[mini_policy_index];
+					let mut evictions = Vec::<K>::new();
+
+					while self.used_cache_size > self.max_cache_size {
+						if let Some(key) = mini_policy_stack.pop() {
+							if let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) {
+								let size = self.overhead_manager.total_size(key, &object);
+								self.used_cache_size -= size;
+
+								evictions.push(key);
+								buffered_events.push(WorkerEvent::Del(key, size, None));
+							}
+						} else {
+							// the mini stack is empty, but it's okay because the cache will just use
+							// a little more memory until the policy stack is reconstructed, so we want
+							// to be sure we don't get stuck here
+							break;
+						}
 					}
 
-					policy_stack.remove(key);
-				}
+					for key in &evictions {
+						for (index, mini_stack) in self.mini_policy_stacks.iter_mut().enumerate() {
+							if index != mini_policy_index {
+								mini_stack.remove(*key);
+							}
+						}
+					}
+				},
+
+				_ => unreachable!(),
 			}
 
 			let now = time::timestamp();
@@ -158,7 +230,7 @@ where
 
 impl<K, V, S> PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -167,17 +239,17 @@ where
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
-		policies: &[PaperPolicy],
+		policy: PaperPolicy,
 		traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
-		let policy_stacks = policies
-			.iter()
-			.map(|policy| policy.into())
-			.collect();
-
-		let policy_index = 0;
+		let mini_policy_stacks = vec![
+			PaperPolicy::Lfu.into(),
+			PaperPolicy::Fifo.into(),
+			PaperPolicy::Lru.into(),
+			PaperPolicy::Mru.into(),
+		].into_boxed_slice();
 
 		PolicyWorker {
 			listener,
@@ -189,36 +261,53 @@ where
 			max_cache_size,
 			used_cache_size: 0,
 
-			policy_stacks,
-			policy_index,
-
+			policy_stack: Some(policy.into()),
 			traces,
+
+			mini_policy_stacks,
+			mini_policy_index: None,
 
 			last_set_time: None,
 		}
 	}
 
 	fn handle_get(&mut self, key: K) {
-		for policy_stack in self.policy_stacks.iter_mut() {
-			policy_stack.update(key);
+		if let Some(stack) = &mut self.policy_stack {
+			stack.update(key);
+		}
+
+		for mini_stack in &mut self.mini_policy_stacks {
+			mini_stack.update(key);
 		}
 	}
 
 	fn handle_set(&mut self, key: K) {
-		for policy_stack in self.policy_stacks.iter_mut() {
-			policy_stack.insert(key);
+		if let Some(stack) = &mut self.policy_stack {
+			stack.insert(key);
+		}
+
+		for mini_stack in &mut self.mini_policy_stacks {
+			mini_stack.insert(key);
 		}
 	}
 
 	fn handle_del(&mut self, key: K) {
-		for policy_stack in self.policy_stacks.iter_mut() {
-			policy_stack.remove(key);
+		if let Some(stack) = &mut self.policy_stack {
+			stack.remove(key);
+		}
+
+		for mini_stack in &mut self.mini_policy_stacks {
+			mini_stack.remove(key);
 		}
 	}
 
 	fn handle_wipe(&mut self) {
-		for policy_stack in self.policy_stacks.iter_mut() {
-			policy_stack.clear();
+		if let Some(stack) = &mut self.policy_stack {
+			stack.clear();
+		}
+
+		for mini_stack in &mut self.mini_policy_stacks {
+			mini_stack.clear();
 		}
 	}
 }
@@ -226,8 +315,8 @@ where
 fn reconstruct_policy_stack<K>(
 	policy: PaperPolicy,
 	max_size: CacheSize,
-	traces: &Arc<RwLock<VecDeque<(Instant, File)>>>,
-) -> Result<(), CacheError>
+	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
+) -> Result<PolicyStackType<K>, CacheError>
 where
 	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 {
@@ -237,7 +326,8 @@ where
 	let mut current_size = 0u64;
 
 	for (_, file) in traces.read().map_err(|_| CacheError::Internal)?.iter() {
-		let file = file.try_clone().map_err(|_| CacheError::Internal)?;
+		let mut file = file.try_clone().map_err(|_| CacheError::Internal)?;
+		file.seek(SeekFrom::Start(0)).map_err(|_| CacheError::Internal)?;
 
 		let reader = BinaryReader::<Access<K>>::from_file(file)
 			.map_err(|_| CacheError::Internal)?;
@@ -267,12 +357,12 @@ where
 		}
 	}
 
-	Ok(())
+	Ok(stack)
 }
 
 unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}
