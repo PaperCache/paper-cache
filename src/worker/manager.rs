@@ -1,12 +1,17 @@
 use std::{
-	sync::Arc,
-	hash::{Hash, BuildHasher},
-	marker::PhantomData,
 	thread,
+	sync::{Arc, RwLock},
+	path::PathBuf,
+	hash::{Hash, BuildHasher},
+	time::Instant,
+	collections::VecDeque,
+	marker::PhantomData,
 };
 
 use typesize::TypeSize;
+use tempfile::TempDir;
 use crossbeam_channel::unbounded;
+use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
 	cache::{ObjectMapRef, StatsRef, OverheadManagerRef},
@@ -18,17 +23,20 @@ use crate::{
 		WorkerReceiver,
 		PolicyWorker,
 		TtlWorker,
+		TraceWorker,
 	},
 };
 
 pub struct WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
 	listener: WorkerReceiver<K>,
 	workers: Arc<Box<[WorkerSender<K>]>>,
+
+	traces: Arc<RwLock<VecDeque<(Instant, PathBuf)>>>,
 
 	_v_marker: PhantomData<V>,
 	_s_marker: PhantomData<S>,
@@ -37,7 +45,7 @@ where
 impl<K, V, S> Worker<K, V, S> for WorkerManager<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -57,7 +65,7 @@ where
 
 impl<K, V, S> WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
@@ -70,6 +78,7 @@ where
 	) -> Self {
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();
+		let (trace_worker, trace_listener) = unbounded();
 
 		register_worker(PolicyWorker::<K, V, S>::new(
 			policy_listener,
@@ -86,9 +95,26 @@ where
 			overhead_manager.clone(),
 		));
 
+		let trace_dir = Arc::new(TempDir::new().expect("Could not create trace directory."));
+		let traces = Arc::new(RwLock::new(VecDeque::new()));
+
+		register_worker(TraceWorker::<K, V, S>::new(
+			trace_listener,
+			trace_dir.clone(),
+			traces.clone(),
+		));
+
+		let workers: Arc<Box<[WorkerSender<K>]>> = Arc::new(Box::new([
+			policy_worker,
+			ttl_worker,
+			trace_worker,
+		]));
+
 		WorkerManager {
 			listener,
-			workers: Arc::new(Box::new([policy_worker, ttl_worker])),
+			workers,
+
+			traces,
 
 			_v_marker: PhantomData,
 			_s_marker: PhantomData,
@@ -98,7 +124,7 @@ where
 
 fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -107,7 +133,7 @@ where
 
 unsafe impl<K, V, S> Send for WorkerManager<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

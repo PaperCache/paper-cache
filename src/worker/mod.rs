@@ -1,6 +1,7 @@
 mod manager;
 mod policy;
 mod ttl;
+mod trace;
 
 use std::hash::{Hash, BuildHasher};
 use typesize::TypeSize;
@@ -18,7 +19,7 @@ pub type WorkerReceiver<K> = Receiver<WorkerEvent<K>>;
 
 #[derive(Clone)]
 pub enum WorkerEvent<K> {
-	Get(K),
+	Get(K, bool),
 	Set(K, ObjectSize, ExpireTime, Option<ObjectSize>),
 	Del(K, ObjectSize, ExpireTime),
 
@@ -44,4 +45,5 @@ pub use crate::worker::{
 	manager::WorkerManager,
 	policy::PolicyWorker,
 	ttl::TtlWorker,
+	trace::TraceWorker,
 };

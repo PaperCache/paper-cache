@@ -11,6 +11,7 @@ use std::{
 use typesize::TypeSize;
 use dashmap::DashMap;
 use crossbeam_channel::unbounded;
+use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
 	stats::{AtomicStats, Stats},
@@ -38,7 +39,7 @@ pub type OverheadManagerRef = Arc<OverheadManager>;
 
 pub struct PaperCache<K, V, S = RandomState>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + BuildHasher + Clone,
 {
@@ -52,7 +53,7 @@ where
 
 impl<K, V, S> PaperCache<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
@@ -202,7 +203,7 @@ where
 			},
 		};
 
-		self.broadcast(WorkerEvent::Get(key))?;
+		self.broadcast(WorkerEvent::Get(key, result.is_ok()))?;
 
 		result
 	}
@@ -469,7 +470,7 @@ pub fn erase<K, V, S>(
 	key: K,
 ) -> Result<Object<V>, CacheError>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -499,7 +500,7 @@ fn has_duplicate_policies(policies: &[PaperPolicy]) -> bool {
 
 unsafe impl<K, V, S> Send for PaperCache<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

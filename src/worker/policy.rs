@@ -1,12 +1,16 @@
 use std::{
+	thread,
 	hash::{Hash, BuildHasher},
 	time::Duration,
-	thread,
 };
 
 use typesize::TypeSize;
 use crossbeam_channel::Receiver;
-use kwik::time;
+
+use kwik::{
+	time,
+	file::binary::{ReadChunk, WriteChunk},
+};
 
 use crate::{
 	cache::{CacheSize, ObjectMapRef, StatsRef, OverheadManagerRef, erase},
@@ -17,7 +21,7 @@ use crate::{
 
 pub struct PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -38,7 +42,7 @@ where
 impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -52,7 +56,7 @@ where
 
 			for event in events {
 				match event {
-					WorkerEvent::Get(key) => self.handle_get(key),
+					WorkerEvent::Get(key, hit) if hit => self.handle_get(key),
 
 					WorkerEvent::Set(key, size, _, old_size) => {
 						self.handle_set(key);
@@ -131,7 +135,7 @@ where
 
 impl<K, V, S> PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -195,7 +199,7 @@ where
 
 unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}

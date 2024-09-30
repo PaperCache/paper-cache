@@ -1,11 +1,15 @@
 use std::{
+	thread,
 	hash::{Hash, BuildHasher},
 	time::Duration,
-	thread,
 };
 
 use typesize::TypeSize;
-use kwik::time;
+
+use kwik::{
+	time,
+	file::binary::{ReadChunk, WriteChunk},
+};
 
 use crate::{
 	cache::{ObjectMapRef, StatsRef, OverheadManagerRef, erase},
@@ -16,7 +20,7 @@ use crate::{
 
 pub struct TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -32,7 +36,7 @@ where
 impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -74,7 +78,7 @@ where
 
 impl<K, V, S> TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
@@ -98,7 +102,7 @@ where
 
 unsafe impl<K, V, S> Send for TtlWorker<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize,
+	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
 	S: Default + Clone + BuildHasher,
 {}
