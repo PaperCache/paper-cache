@@ -1,18 +1,17 @@
 use std::{
-	fs,
 	mem,
 	thread,
 	sync::{Arc, RwLock},
 	io::{self, Cursor},
-	path::{Path, PathBuf},
 	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
+	fs::File,
 	collections::VecDeque,
 	marker::PhantomData,
 };
 
 use typesize::TypeSize;
-use tempfile::{TempDir, NamedTempFile};
+use tempfile::tempfile;
 use byteorder::{ReadBytesExt, LittleEndian};
 
 use kwik::file::{
@@ -38,8 +37,7 @@ where
 {
 	listener: WorkerReceiver<K>,
 
-	trace_dir: Arc<TempDir>,
-	traces: Arc<RwLock<VecDeque<(Instant, PathBuf)>>>,
+	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	current_writer: Option<BinaryWriter<Access<K>>>,
 
 	_v_marker: PhantomData<V>,
@@ -66,43 +64,10 @@ where
 
 			for event in events {
 				match event {
-					WorkerEvent::Get(key, hit) if hit => {
-						let access = Access {
-							key,
-							size: 0,
-						};
-
-						self.get_writer()?
-							.write_chunk(&access)
-							.map_err(|_| CacheError::Internal)?;
-					},
-
-					WorkerEvent::Set(key, size, _, _) => {
-						let access = Access {
-							key,
-							size,
-						};
-
-						self.get_writer()?
-							.write_chunk(&access)
-							.map_err(|_| CacheError::Internal)?;
-					},
-
-					WorkerEvent::Wipe => {
-						self.traces
-							.write().map_err(|_| CacheError::Internal)?
-							.clear();
-
-						self.current_writer = None;
-
-						clear_dir(self.trace_dir.path())
-							.map_err(|_| CacheError::Internal)?;
-					},
-
-					WorkerEvent::Policy(_) => {
-						self.get_writer()?
-							.flush().map_err(|_| CacheError::Internal)?;
-					}
+					WorkerEvent::Get(key, hit) if hit => self.handle_get(key)?,
+					WorkerEvent::Set(key, size, _, _) => self.handle_set(key, size)?,
+					WorkerEvent::Wipe => self.handle_wipe()?,
+					WorkerEvent::Policy(_) => self.handle_policy()?,
 
 					_ => {},
 				}
@@ -121,19 +86,54 @@ where
 {
 	pub fn new(
 		listener: WorkerReceiver<K>,
-		trace_dir: Arc<TempDir>,
-		traces: Arc<RwLock<VecDeque<(Instant, PathBuf)>>>,
+		traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	) -> Self {
 		TraceWorker {
 			listener,
 
-			trace_dir,
 			traces,
 			current_writer: None,
 
 			_v_marker: PhantomData,
 			_s_marker: PhantomData,
 		}
+	}
+
+	fn handle_get(&mut self, key: K) -> Result<(), CacheError> {
+		let access = Access {
+			key,
+			size: 0,
+		};
+
+		self.get_writer()?
+			.write_chunk(&access)
+			.map_err(|_| CacheError::Internal)
+	}
+
+	fn handle_set(&mut self, key: K, size: ObjectSize) -> Result<(), CacheError> {
+		let access = Access {
+			key,
+			size,
+		};
+
+		self.get_writer()?
+			.write_chunk(&access)
+			.map_err(|_| CacheError::Internal)
+	}
+
+	fn handle_wipe(&mut self) -> Result<(), CacheError> {
+		self.traces
+			.write().map_err(|_| CacheError::Internal)?
+			.clear();
+
+		self.current_writer = None;
+
+		Ok(())
+	}
+
+	fn handle_policy(&mut self) -> Result<(), CacheError> {
+		self.get_writer()?
+			.flush().map_err(|_| CacheError::Internal)
 	}
 
 	fn get_writer(&mut self) -> Result<&mut BinaryWriter<Access<K>>, CacheError> {
@@ -164,37 +164,23 @@ where
 		}
 
 		// the latest trace is no longer valid, so create a new one
-		let file = NamedTempFile::new_in(self.trace_dir.path())
-			.map_err(|_| CacheError::Internal)?;
+		let file = tempfile().map_err(|_| CacheError::Internal)?;
 
-		let path_buf = file
-			.into_temp_path()
-			.to_path_buf()
-			.with_extension("pbin");
+		// we need to keep a secondary instance of the file open to prevent it
+		// from being deleted
+		let file_clone = file.try_clone().map_err(|_| CacheError::Internal)?;
 
-		let writer = BinaryWriter::<Access<K>>::new(path_buf.as_path())
+		let writer = BinaryWriter::<Access<K>>::from_file(file)
 			.map_err(|_| CacheError::Internal)?;
 
 		self.traces
 			.write().map_err(|_| CacheError::Internal)?
-			.push_back((Instant::now(), path_buf));
+			.push_back((Instant::now(), file_clone));
 
 		self.current_writer = Some(writer);
 
 		Ok(())
 	}
-}
-
-/// Removes all entries from the directory at the supplied path
-fn clear_dir<P>(path: P) -> io::Result<()>
-where
-	P: AsRef<Path>,
-{
-	for entry in fs::read_dir(path)? {
-		fs::remove_file(entry?.path())?;
-	}
-
-	Ok(())
 }
 
 impl<K> SizedChunk for Access<K>

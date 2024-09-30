@@ -1,15 +1,14 @@
 use std::{
 	thread,
 	sync::{Arc, RwLock},
-	path::PathBuf,
 	hash::{Hash, BuildHasher},
 	time::Instant,
+	fs::File,
 	collections::VecDeque,
 	marker::PhantomData,
 };
 
 use typesize::TypeSize;
-use tempfile::TempDir;
 use crossbeam_channel::unbounded;
 use kwik::file::binary::{ReadChunk, WriteChunk};
 
@@ -36,7 +35,7 @@ where
 	listener: WorkerReceiver<K>,
 	workers: Arc<Box<[WorkerSender<K>]>>,
 
-	traces: Arc<RwLock<VecDeque<(Instant, PathBuf)>>>,
+	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 
 	_v_marker: PhantomData<V>,
 	_s_marker: PhantomData<S>,
@@ -95,12 +94,10 @@ where
 			overhead_manager.clone(),
 		));
 
-		let trace_dir = Arc::new(TempDir::new().expect("Could not create trace directory."));
 		let traces = Arc::new(RwLock::new(VecDeque::new()));
 
 		register_worker(TraceWorker::<K, V, S>::new(
 			trace_listener,
-			trace_dir.clone(),
 			traces.clone(),
 		));
 
