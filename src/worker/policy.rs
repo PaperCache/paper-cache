@@ -114,29 +114,35 @@ where
 					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
 
 					WorkerEvent::Policy(policy) => {
-						let mini_policy_index = self.mini_policy_stacks
-							.iter()
-							.position(|mini_stack| mini_stack.is_policy(policy))
-							.unwrap_or(0);
+						let is_current_policy = self.policy_stack
+							.as_ref()
+							.is_some_and(|policy_stack| policy_stack.is_policy(policy));
 
-						self.policy_stack = None;
-						self.mini_policy_index = Some(mini_policy_index);
+						if !is_current_policy {
+							let mini_policy_index = self.mini_policy_stacks
+								.iter()
+								.position(|mini_stack| mini_stack.is_policy(policy))
+								.unwrap_or(0);
 
-						let max_cache_size = self.max_cache_size;
-						let traces = self.traces.clone();
-						let policy_reconstruct_tx = policy_reconstruct_tx.clone();
+							self.policy_stack = None;
+							self.mini_policy_index = Some(mini_policy_index);
 
-						thread::spawn(move || {
-							let reconstruction_result = reconstruct_policy_stack::<K>(
-								policy,
-								max_cache_size,
-								traces.clone(),
-							);
+							let max_cache_size = self.max_cache_size;
+							let traces = self.traces.clone();
+							let policy_reconstruct_tx = policy_reconstruct_tx.clone();
 
-							if let Ok(stack) = reconstruction_result {
-								let _ = policy_reconstruct_tx.send(stack);
-							}
-						});
+							thread::spawn(move || {
+								let reconstruction_result = reconstruct_policy_stack::<K>(
+									policy,
+									max_cache_size,
+									traces.clone(),
+								);
+
+								if let Ok(stack) = reconstruction_result {
+									let _ = policy_reconstruct_tx.send(stack);
+								}
+							});
+						}
 					},
 
 					_ => {},
@@ -337,9 +343,9 @@ where
 
 			match size_map.entry(access.key()) {
 				Entry::Occupied(o) => {
-					let old_size = o.into_mut();
-					current_size -= *old_size;
-					*old_size = access.size();
+					let saved_size = o.into_mut();
+					current_size -= *saved_size;
+					*saved_size = access.size();
 				},
 
 				Entry::Vacant(v) => {
