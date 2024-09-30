@@ -27,7 +27,7 @@ use crate::{
 
 const TRACE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const TRACE_REFRESH_AGE: Duration = Duration::from_secs(60 * 60);
-const WORKER_DELAY: Duration = Duration::from_millis(100);
+const POLL_DELAY: Duration = Duration::from_secs(1);
 
 pub struct TraceWorker<K, V, S>
 where
@@ -73,7 +73,7 @@ where
 				}
 			}
 
-			thread::sleep(WORKER_DELAY);
+			thread::sleep(POLL_DELAY);
 		}
 	}
 }
@@ -180,6 +180,19 @@ where
 		self.current_writer = Some(writer);
 
 		Ok(())
+	}
+}
+
+impl<K> Access<K>
+where
+	K: Copy,
+{
+	pub fn key(&self) -> K {
+		self.key
+	}
+
+	pub fn size(&self) -> ObjectSize {
+		self.size
 	}
 }
 

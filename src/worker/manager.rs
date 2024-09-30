@@ -2,8 +2,6 @@ use std::{
 	thread,
 	sync::{Arc, RwLock},
 	hash::{Hash, BuildHasher},
-	time::Instant,
-	fs::File,
 	collections::VecDeque,
 	marker::PhantomData,
 };
@@ -34,8 +32,6 @@ where
 {
 	listener: WorkerReceiver<K>,
 	workers: Arc<Box<[WorkerSender<K>]>>,
-
-	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 
 	_v_marker: PhantomData<V>,
 	_s_marker: PhantomData<S>,
@@ -79,12 +75,15 @@ where
 		let (ttl_worker, ttl_listener) = unbounded();
 		let (trace_worker, trace_listener) = unbounded();
 
+		let traces = Arc::new(RwLock::new(VecDeque::new()));
+
 		register_worker(PolicyWorker::<K, V, S>::new(
 			policy_listener,
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
 			policies,
+			traces.clone(),
 		));
 
 		register_worker(TtlWorker::<K, V, S>::new(
@@ -94,7 +93,6 @@ where
 			overhead_manager.clone(),
 		));
 
-		let traces = Arc::new(RwLock::new(VecDeque::new()));
 
 		register_worker(TraceWorker::<K, V, S>::new(
 			trace_listener,
@@ -110,8 +108,6 @@ where
 		WorkerManager {
 			listener,
 			workers,
-
-			traces,
 
 			_v_marker: PhantomData,
 			_s_marker: PhantomData,

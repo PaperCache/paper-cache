@@ -109,7 +109,7 @@ where
 		self.count_lists.clear();
 	}
 
-	fn eviction(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<K> {
 		let count_list_index = self.count_lists.front_index()?;
 		let count_list = self.count_lists.get_mut(count_list_index)?;
 
@@ -190,7 +190,7 @@ mod tests {
 
 		let mut eviction_count = 0;
 
-		while let Some(key) = stack.eviction() {
+		while let Some(key) = stack.pop() {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
 				None => assert!(false),

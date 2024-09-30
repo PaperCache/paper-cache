@@ -44,7 +44,7 @@ where
 		self.stack.clear();
 	}
 
-	fn eviction(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<K> {
 		let evicted = self.stack.pop_front();
 
 		if let Some(key) = &evicted {
@@ -84,7 +84,7 @@ mod tests {
 
 		let mut eviction_count = 0;
 
-		while let Some(key) = stack.eviction() {
+		while let Some(key) = stack.pop() {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
 				None => assert!(false),

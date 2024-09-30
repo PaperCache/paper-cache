@@ -16,7 +16,7 @@ where
 
 	fn clear(&mut self);
 
-	fn eviction(&mut self) -> Option<K>;
+	fn pop(&mut self) -> Option<K>;
 }
 
 pub enum PolicyStackType<K>
@@ -69,12 +69,12 @@ where
 		}
 	}
 
-	fn eviction(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<K> {
 		match self {
-			PolicyStackType::Lfu(stack) => stack.eviction(),
-			PolicyStackType::Fifo(stack) => stack.eviction(),
-			PolicyStackType::Lru(stack) => stack.eviction(),
-			PolicyStackType::Mru(stack) => stack.eviction(),
+			PolicyStackType::Lfu(stack) => stack.pop(),
+			PolicyStackType::Fifo(stack) => stack.pop(),
+			PolicyStackType::Lru(stack) => stack.pop(),
+			PolicyStackType::Mru(stack) => stack.pop(),
 		}
 	}
 }
