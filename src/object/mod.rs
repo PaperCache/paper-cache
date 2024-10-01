@@ -4,7 +4,7 @@ use std::sync::Arc;
 use typesize::TypeSize;
 use kwik::time;
 
-pub type ObjectSize = u64;
+pub type ObjectSize = u32;
 pub type ExpireTime = Option<u64>;
 
 pub struct Object<T>

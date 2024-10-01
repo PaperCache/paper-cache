@@ -6,8 +6,8 @@ use crate::{
 };
 
 pub struct OverheadManager {
-	policies_overhead_per_object: u64,
-	ttl_overhead_per_object: u64,
+	policies_overhead_per_object: ObjectSize,
+	ttl_overhead_per_object: ObjectSize,
 }
 
 impl OverheadManager {

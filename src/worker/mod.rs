@@ -1,11 +1,15 @@
 mod manager;
 mod policy;
 mod ttl;
-mod trace;
 
-use std::hash::{Hash, BuildHasher};
+use std::{
+	thread,
+	hash::{Hash, BuildHasher},
+};
+
 use typesize::TypeSize;
 use crossbeam_channel::{Sender, Receiver};
+use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
 	cache::CacheSize,
@@ -41,9 +45,17 @@ where
 	fn run(&mut self) -> Result<(), CacheError>;
 }
 
+pub fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
+where
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
+	V: 'static + Sync + TypeSize,
+	S: Default + Clone + BuildHasher,
+{
+	thread::spawn(move || worker.run());
+}
+
 pub use crate::worker::{
 	manager::WorkerManager,
 	policy::PolicyWorker,
 	ttl::TtlWorker,
-	trace::TraceWorker,
 };

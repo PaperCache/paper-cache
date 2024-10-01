@@ -232,7 +232,7 @@ where
 			return Err(CacheError::ZeroValueSize);
 		}
 
-		if self.stats.exceeds_max_size(size) {
+		if self.stats.exceeds_max_size(size.into()) {
 			return Err(CacheError::ExceedingValueSize);
 		}
 
@@ -242,10 +242,10 @@ where
 			.insert(key, object)
 			.map(|old_object| self.overhead_manager.total_size(key, &old_object));
 
-		self.stats.increase_used_size(size);
+		self.stats.increase_used_size(size.into());
 
 		if let Some(old_object_size) = old_object_size {
-			self.stats.decrease_used_size(old_object_size);
+			self.stats.decrease_used_size(old_object_size.into());
 		}
 
 		self.broadcast(WorkerEvent::Set(key, size, expiry, old_object_size))?;
@@ -478,7 +478,7 @@ where
 		.remove(&key)
 		.ok_or(CacheError::KeyNotFound)?;
 
-	stats.decrease_used_size(overhead_manager.total_size(key, &object));
+	stats.decrease_used_size(overhead_manager.total_size(key, &object).into());
 
 	match !object.is_expired() {
 		true => Ok(object),
