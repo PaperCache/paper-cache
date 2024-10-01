@@ -1,13 +1,10 @@
-use std::sync::{
-	Arc,
-	atomic::{Ordering, AtomicU64, AtomicUsize},
-};
-
+use std::sync::atomic::{Ordering, AtomicU64, AtomicUsize};
 use kwik::time;
 
 use crate::{
-	PaperPolicy,
-	cache::{CacheSize, AtomicCacheSize},
+	cache::{CacheSize, AtomicCacheSize, POLICIES},
+	error::CacheError,
+	policy::PaperPolicy,
 };
 
 #[derive(Debug)]
@@ -148,8 +145,18 @@ impl AtomicStats {
 		self.used_size.fetch_sub(size, Ordering::Relaxed);
 	}
 
-	pub fn set_policy_index(&self, policy_index: usize) {
-		self.policy_index.store(policy_index, Ordering::Relaxed);
+	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
+		let maybe_index = POLICIES
+			.iter()
+			.position(|configured_policy| configured_policy.eq(&policy));
+
+		let Some(index) = maybe_index else {
+			return Err(CacheError::Internal);
+		};
+
+		self.policy_index.store(index, Ordering::Relaxed);
+
+		Ok(())
 	}
 
 	#[must_use]
@@ -167,7 +174,7 @@ impl AtomicStats {
 	}
 
 	#[must_use]
-	pub fn to_stats(&self, policies: &Arc<Box<[PaperPolicy]>>) -> Stats {
+	pub fn to_stats(&self) -> Stats {
 		Stats {
 			max_size: self.get_max_size(),
 			used_size: self.used_size.load(Ordering::Relaxed),
@@ -177,7 +184,7 @@ impl AtomicStats {
 			total_sets: self.total_sets.load(Ordering::Relaxed),
 			total_dels: self.total_dels.load(Ordering::Relaxed),
 
-			policy: policies[self.policy_index.load(Ordering::Relaxed)],
+			policy: POLICIES[self.policy_index.load(Ordering::Relaxed)],
 
 			start_time: self.start_time.load(Ordering::Relaxed),
 		}

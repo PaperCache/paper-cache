@@ -37,6 +37,13 @@ pub type ObjectMapRef<K, V, S> = Arc<DashMap<K, Object<V>, S>>;
 pub type StatsRef = Arc<AtomicStats>;
 pub type OverheadManagerRef = Arc<OverheadManager>;
 
+pub const POLICIES: &[PaperPolicy] = &[
+	PaperPolicy::Lfu,
+	PaperPolicy::Fifo,
+	PaperPolicy::Lru,
+	PaperPolicy::Mru,
+];
+
 pub struct PaperCache<K, V, S = RandomState>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
@@ -46,7 +53,6 @@ where
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
 
-	policies: Arc<Box<[PaperPolicy]>>,
 	worker_manager: Arc<WorkerSender<K>>,
 	overhead_manager: OverheadManagerRef,
 }
@@ -57,34 +63,25 @@ where
 	V: 'static + Sync + TypeSize,
 	S: 'static + Default + Clone + BuildHasher,
 {
-	/// Creates an empty `PaperCache` with maximum size `max_size`.
-	/// If the maximum size is zero, a [`CacheError`] will be returned.
-	/// The cache will only consider eviction policies specified
-	/// by `policies` and return an error if the number of supplied
-	/// `policies` is zero. The cache's initial eviction policy will
-	/// be the first policy.
+	/// Creates an empty `PaperCache` with maximum size `max_size` and
+	/// eviction policy `policy`. If the maximum size is zero, a
+	/// [`CacheError`] will be returned.
 	///
 	/// # Examples
 	///
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// assert!(PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lru]).is_ok());
+	/// assert!(PaperCache::<u32, u32>::new(1000, PaperPolicy::Lru).is_ok());
 	///
 	/// // Supplying a maximum size of zero will return a CacheError.
-	/// assert!(PaperCache::<u32, u32>::new(0, &[PaperPolicy::Lru]).is_err());
-	///
-	/// // Supplying an empty policies slice will return a CacheError.
-	/// assert!(PaperCache::<u32, u32>::new(10, &[]).is_err());
-	///
-	/// // Supplying duplicate policies will return a CacheError.
-	/// assert!(PaperCache::<u32, u32>::new(10, &[PaperPolicy::Lru, PaperPolicy::Fifo, PaperPolicy::Lru]).is_err());
+	/// assert!(PaperCache::<u32, u32>::new(0, PaperPolicy::Lru).is_err());
 	/// ```
 	pub fn new(
 		max_size: CacheSize,
-		policies: &[PaperPolicy],
+		policy: PaperPolicy,
 	) -> Result<Self, CacheError> {
-		Self::with_hasher(max_size, policies, Default::default())
+		Self::with_hasher(max_size, policy, Default::default())
 	}
 
 	/// Creates an empty `PaperCache` with the supplied hasher.
@@ -95,29 +92,21 @@ where
 	/// use std::collections::hash_map::RandomState;
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// assert!(PaperCache::<u32, u32>::with_hasher(1000, &[PaperPolicy::Lru], RandomState::default()).is_ok());
+	/// assert!(PaperCache::<u32, u32>::with_hasher(1000, PaperPolicy::Lru, RandomState::default()).is_ok());
 	/// ```
 	pub fn with_hasher(
 		max_size: CacheSize,
-		policies: &[PaperPolicy],
+		policy: PaperPolicy,
 		hasher: S,
 	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		if policies.is_empty() {
-			return Err(CacheError::EmptyPolicies);
-		}
-
-		if has_duplicate_policies(policies) {
-			return Err(CacheError::DuplicatePolicies);
-		}
-
 		let objects = Arc::new(DashMap::with_hasher(hasher));
 		let stats = Arc::new(AtomicStats::new(max_size, 0));
 
-		let overhead_manager = Arc::new(OverheadManager::new(policies));
+		let overhead_manager = Arc::new(OverheadManager::default());
 
 		let (worker_sender, worker_listener) = unbounded();
 
@@ -126,7 +115,7 @@ where
 			&objects,
 			&stats,
 			&overhead_manager,
-			policies[0],
+			policy,
 		);
 
 		thread::spawn(move || worker_manager.run());
@@ -135,7 +124,6 @@ where
 			objects,
 			stats,
 
-			policies: Arc::new(policies.into()),
 			worker_manager: Arc::new(worker_sender),
 			overhead_manager,
 		};
@@ -149,7 +137,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	/// assert_eq!(cache.version(), env!("CARGO_PKG_VERSION"));
 	/// ```
 	#[must_use]
@@ -163,7 +151,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	///
@@ -171,7 +159,7 @@ where
 	/// ```
 	#[must_use]
 	pub fn stats(&self) -> Stats {
-		self.stats.to_stats(&self.policies)
+		self.stats.to_stats()
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -181,7 +169,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	///
@@ -219,7 +207,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// assert!(cache.set(0, 0, None).is_ok());
 	/// ```
@@ -260,7 +248,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	/// assert!(cache.del(0).is_ok());
@@ -289,7 +277,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	///
@@ -308,7 +296,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	/// cache.set(1, 0, None);
@@ -338,7 +326,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None); // value will not expire
 	/// cache.ttl(0, Some(5)); // value will expire in 5 seconds
@@ -365,7 +353,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
 	///
@@ -388,7 +376,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	/// cache.wipe();
 	/// ```
 	pub fn wipe(&self) -> Result<(), CacheError> {
@@ -407,7 +395,7 @@ where
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lfu]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// assert!(cache.resize(1).is_ok());
 	///
@@ -426,30 +414,17 @@ where
 	}
 
 	/// Sets the eviction policy of the cache to the supplied policy.
-	/// If the supplied policy is not one of the considered eviction policies,
-	/// a [`CacheError`] is returned.
 	///
 	/// # Examples
 	/// ```
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
-	/// let mut cache = PaperCache::<u32, u32>::new(1000, &[PaperPolicy::Lru]).unwrap();
+	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lru).unwrap();
 	///
 	/// assert!(cache.policy(PaperPolicy::Lru).is_ok());
-	///
-	/// // Supplying a policy that is not one of the considered policies will return a CacheError.
-	/// assert!(cache.policy(PaperPolicy::Mru).is_err());
 	/// ```
 	pub fn policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		let index = self.policies
-			.iter()
-			.position(|stored_policy| stored_policy.eq(&policy));
-
-		let Some(index) = index else {
-			return Err(CacheError::UnconfiguredPolicy);
-		};
-
-		self.stats.set_policy_index(index);
+		self.stats.set_policy(policy)?;
 		self.broadcast(WorkerEvent::Policy(policy))?;
 
 		Ok(())
@@ -485,18 +460,6 @@ where
 		true => Ok(object),
 		false => Err(CacheError::KeyNotFound),
 	}
-}
-
-fn has_duplicate_policies(policies: &[PaperPolicy]) -> bool {
-	policies
-		.iter()
-		.enumerate()
-		.any(|(index, policy)| {
-			policies
-				.iter()
-				.skip(index + 1)
-				.any(|other| policy.eq(other))
-		})
 }
 
 unsafe impl<K, V, S> Send for PaperCache<K, V, S>

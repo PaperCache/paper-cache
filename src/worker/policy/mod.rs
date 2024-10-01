@@ -26,7 +26,14 @@ use kwik::{
 };
 
 use crate::{
-	cache::{CacheSize, ObjectMapRef, StatsRef, OverheadManagerRef, erase},
+	cache::{
+		CacheSize,
+		ObjectMapRef,
+		StatsRef,
+		OverheadManagerRef,
+		POLICIES,
+		erase,
+	},
 	object::ObjectSize,
 	error::CacheError,
 	policy::PaperPolicy,
@@ -169,12 +176,10 @@ where
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
-		let mini_policy_stacks = vec![
-			PaperPolicy::Lfu.into(),
-			PaperPolicy::Fifo.into(),
-			PaperPolicy::Lru.into(),
-			PaperPolicy::Mru.into(),
-		].into_boxed_slice();
+		let mini_policy_stacks = POLICIES
+			.iter()
+			.map(|policy| policy.into())
+			.collect::<Box<[_]>>();
 
 		let traces = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();

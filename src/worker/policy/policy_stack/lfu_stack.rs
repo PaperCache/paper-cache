@@ -12,7 +12,7 @@ where
 }
 
 struct CountList<K> {
-	count: u64,
+	count: u32,
 	list: VecList<K>,
 }
 
@@ -125,7 +125,7 @@ where
 }
 
 impl<K> CountList<K> {
-	fn new(count: u64) -> Self {
+	fn new(count: u32) -> Self {
 		CountList {
 			count,
 			list: VecList::new(),

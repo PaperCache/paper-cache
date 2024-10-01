@@ -1,8 +1,9 @@
 use typesize::TypeSize;
 
 use crate::{
-	object::{Object, ObjectSize},
+	cache::POLICIES,
 	policy::PaperPolicy,
+	object::{Object, ObjectSize},
 };
 
 pub struct OverheadManager {
@@ -11,10 +12,28 @@ pub struct OverheadManager {
 }
 
 impl OverheadManager {
-	pub fn new(policies: &[PaperPolicy]) -> Self {
+	pub fn total_size<K, V>(&self, key: K, object: &Object<V>) -> ObjectSize
+	where
+		K: TypeSize,
+		V: TypeSize,
+	{
+		let mut total_size = key.get_size() as ObjectSize
+			+ object.total_size()
+			+ self.policies_overhead_per_object;
+
+		if object.expiry().is_some() {
+			total_size += self.ttl_overhead_per_object;
+		}
+
+		total_size
+	}
+}
+
+impl Default for OverheadManager {
+	fn default() -> Self {
 		// the overheads are just rough estimates of the number of bytes per object
 
-		let policies_overhead_per_object = policies
+		let policies_overhead_per_object = POLICIES
 			.iter()
 			.map(|policy| match policy {
 				// 8 bytes for the key of the FxHashMap, 16 bytes for KeyIndex, 8 bytes for the CountList
@@ -38,21 +57,5 @@ impl OverheadManager {
 			policies_overhead_per_object,
 			ttl_overhead_per_object,
 		}
-	}
-
-	pub fn total_size<K, V>(&self, key: K, object: &Object<V>) -> ObjectSize
-	where
-		K: TypeSize,
-		V: TypeSize,
-	{
-		let mut total_size = key.get_size() as ObjectSize
-			+ object.total_size()
-			+ self.policies_overhead_per_object;
-
-		if object.expiry().is_some() {
-			total_size += self.ttl_overhead_per_object;
-		}
-
-		total_size
 	}
 }
