@@ -1,6 +1,6 @@
 use std::{
 	thread,
-	sync::{Arc, RwLock},
+	sync::Arc,
 	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
 	fs::File,
@@ -9,6 +9,7 @@ use std::{
 };
 
 use typesize::TypeSize;
+use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
 use tempfile::tempfile;
 
@@ -102,18 +103,18 @@ where
 	/// TRACE_REFRESH_AGE
 	fn refresh_traces(&mut self) -> Result<(), CacheError> {
 		while self.traces
-			.read().map_err(|_| CacheError::Internal)?
-			.back().is_some_and(|(created, _)| created.elapsed() > TRACE_MAX_AGE) {
+			.read()
+			.back()
+			.is_some_and(|(created, _)| created.elapsed() > TRACE_MAX_AGE) {
 
 			// remove any trace path that is older than TRACE_MAX_AGE
-			self.traces
-				.write().map_err(|_| CacheError::Internal)?
-				.pop_front();
+			self.traces.write().pop_front();
 		}
 
 		if self.traces
-			.read().map_err(|_| CacheError::Internal)?
-			.back().is_some_and(|(created, _)| created.elapsed() <= TRACE_REFRESH_AGE) {
+			.read()
+			.back()
+			.is_some_and(|(created, _)| created.elapsed() <= TRACE_REFRESH_AGE) {
 
 			// the latest trace is still valid
 			return Ok(());
@@ -130,7 +131,7 @@ where
 			.map_err(|_| CacheError::Internal)?;
 
 		self.traces
-			.write().map_err(|_| CacheError::Internal)?
+			.write()
 			.push_back((Instant::now(), file_clone));
 
 		self.current_writer = Some(writer);

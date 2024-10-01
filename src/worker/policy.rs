@@ -3,15 +3,16 @@ mod trace;
 
 use std::{
 	thread,
-	sync::{Arc, RwLock},
+	sync::Arc,
 	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
-	io::{Seek, SeekFrom},
+	io::Seek,
 	fs::File,
 	collections::VecDeque,
 };
 
 use typesize::TypeSize;
+use parking_lot::RwLock;
 use crossbeam_channel::{Sender, Receiver, unbounded};
 
 use kwik::{
@@ -123,7 +124,7 @@ where
 				if let Some(stack_event) = StackEvent::<K>::maybe_from_worker_event(&event) {
 					if self.mini_policy_index.is_none() {
 						self.trace_worker
-							.try_send(stack_event)
+							.send(stack_event)
 							.map_err(|_| CacheError::Internal)?;
 					} else {
 						buffered_events.push(stack_event);
@@ -131,7 +132,7 @@ where
 				}
 			}
 
-			self.apply_buffered_events(&mut buffered_events, &policy_reconstruct_rx);
+			self.apply_buffered_events(&buffered_events, &policy_reconstruct_rx);
 			self.flush_buffered_events(&mut buffered_events)?;
 			self.apply_evictions(&mut buffered_events);
 
@@ -166,7 +167,6 @@ where
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
 		policy: PaperPolicy,
-		traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
@@ -177,6 +177,7 @@ where
 			PaperPolicy::Mru.into(),
 		].into_boxed_slice();
 
+		let traces = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
 
 		register_worker(TraceWorker::<K, V, S>::new(
@@ -320,7 +321,7 @@ where
 
 		for event in buffered_events.iter() {
 			self.trace_worker
-				.try_send(event.clone())
+				.send(event.clone())
 				.map_err(|_| CacheError::Internal)?;
 		}
 
@@ -398,14 +399,22 @@ where
 {
 	let mut stack: PolicyStackType<K> = policy.into();
 
-	for (_, file) in traces.read().map_err(|_| CacheError::Internal)?.iter() {
-		let mut file = file.try_clone().map_err(|_| CacheError::Internal)?;
-		file.seek(SeekFrom::Start(0)).map_err(|_| CacheError::Internal)?;
-
-		let reader = BinaryReader::<StackEvent<K>>::from_file(file)
+	for (_, file) in traces.read().iter() {
+		let mut file = file
+			.try_clone()
 			.map_err(|_| CacheError::Internal)?;
 
-		for event in reader {
+		let initial_position = file
+			.stream_position()
+			.map_err(|_| CacheError::Internal)?;
+
+		// start reading the file from the beginning
+		file.rewind().map_err(|_| CacheError::Internal)?;
+
+		let mut reader = BinaryReader::<StackEvent<K>>::from_file(file)
+			.map_err(|_| CacheError::Internal)?;
+
+		for event in reader.iter() {
 			match event {
 				StackEvent::Get(key) => stack.update(key),
 				StackEvent::Set(key) => stack.insert(key),
@@ -413,6 +422,13 @@ where
 				StackEvent::Wipe => stack.clear(),
 			}
 		}
+
+		// ensure the underlying file is returned back to its original position
+		// (this is mostly just a sanity check as reading the file should
+		// already return it to the end which should be the orignal position)
+		reader
+			.offset(initial_position)
+			.map_err(|_| CacheError::Internal)?;
 	}
 
 	Ok(stack)

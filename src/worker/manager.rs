@@ -1,7 +1,6 @@
 use std::{
-	sync::{Arc, RwLock},
+	sync::Arc,
 	hash::{Hash, BuildHasher},
-	collections::VecDeque,
 	marker::PhantomData,
 };
 
@@ -73,15 +72,12 @@ where
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();
 
-		let traces = Arc::new(RwLock::new(VecDeque::new()));
-
 		register_worker(PolicyWorker::<K, V, S>::new(
 			policy_listener,
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
 			policy,
-			traces.clone(),
 		));
 
 		register_worker(TtlWorker::<K, V, S>::new(
