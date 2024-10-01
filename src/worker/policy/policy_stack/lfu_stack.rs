@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
-use crate::policy::policy_stack::PolicyStack;
+use crate::worker::policy::policy_stack::PolicyStack;
 
 pub struct LfuStack<K>
 where
@@ -177,7 +177,7 @@ impl<K> KeyIndex<K> {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::policy::policy_stack::{PolicyStack, LfuStack};
+		use crate::worker::policy::policy_stack::{PolicyStack, LfuStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
 		let mut evictions: Vec<u32> = vec![0, 1, 2, 3];

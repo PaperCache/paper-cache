@@ -1,9 +1,9 @@
 use std::hash::Hash;
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
-use crate::policy::policy_stack::PolicyStack;
+use crate::worker::policy::policy_stack::PolicyStack;
 
-pub struct FifoStack<K>
+pub struct MruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
@@ -11,7 +11,7 @@ where
 	stack: VecList<K>,
 }
 
-impl<K> PolicyStack<K> for FifoStack<K>
+impl<K> PolicyStack<K> for MruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
@@ -22,6 +22,15 @@ where
 
 		let index = self.stack.push_front(key);
 		self.map.insert(key, index);
+	}
+
+	fn update(&mut self, key: K) {
+		if let Some(index) = self.map.get(&key) {
+			if let Some(key) = self.stack.remove(*index) {
+				let new_index = self.stack.push_front(key);
+				self.map.insert(key, new_index);
+			}
+		}
 	}
 
 	fn remove(&mut self, key: K) {
@@ -36,7 +45,7 @@ where
 	}
 
 	fn pop(&mut self) -> Option<K> {
-		let evicted = self.stack.pop_back();
+		let evicted = self.stack.pop_front();
 
 		if let Some(key) = &evicted {
 			self.map.remove(key);
@@ -46,12 +55,12 @@ where
 	}
 }
 
-impl<K> Default for FifoStack<K>
+impl<K> Default for MruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
 	fn default() -> Self {
-		FifoStack {
+		MruStack {
 			map: FxHashMap::default(),
 			stack: VecList::default(),
 		}
@@ -62,12 +71,12 @@ where
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::policy::policy_stack::{PolicyStack, FifoStack};
+		use crate::worker::policy::policy_stack::{PolicyStack, MruStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<u32> = vec![3, 2, 1, 0];
+		let mut evictions: Vec<u32> = vec![1, 3, 2, 0];
 
-		let mut stack = FifoStack::<u32>::default();
+		let mut stack = MruStack::<u32>::default();
 
 		for access in accesses {
 			stack.insert(access);

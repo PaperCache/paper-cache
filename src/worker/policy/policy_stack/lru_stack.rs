@@ -1,9 +1,9 @@
 use std::hash::Hash;
 use rustc_hash::FxHashMap;
 use dlv_list::{VecList, Index};
-use crate::policy::policy_stack::PolicyStack;
+use crate::worker::policy::policy_stack::PolicyStack;
 
-pub struct MruStack<K>
+pub struct LruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
@@ -11,7 +11,7 @@ where
 	stack: VecList<K>,
 }
 
-impl<K> PolicyStack<K> for MruStack<K>
+impl<K> PolicyStack<K> for LruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
@@ -45,7 +45,7 @@ where
 	}
 
 	fn pop(&mut self) -> Option<K> {
-		let evicted = self.stack.pop_front();
+		let evicted = self.stack.pop_back();
 
 		if let Some(key) = &evicted {
 			self.map.remove(key);
@@ -55,12 +55,12 @@ where
 	}
 }
 
-impl<K> Default for MruStack<K>
+impl<K> Default for LruStack<K>
 where
 	K: Copy + Eq + Hash,
 {
 	fn default() -> Self {
-		MruStack {
+		LruStack {
 			map: FxHashMap::default(),
 			stack: VecList::default(),
 		}
@@ -71,12 +71,12 @@ where
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::policy::policy_stack::{PolicyStack, MruStack};
+		use crate::worker::policy::policy_stack::{PolicyStack, LruStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<u32> = vec![1, 3, 2, 0];
+		let mut evictions: Vec<u32> = vec![0, 2, 3, 1];
 
-		let mut stack = MruStack::<u32>::default();
+		let mut stack = LruStack::<u32>::default();
 
 		for access in accesses {
 			stack.insert(access);

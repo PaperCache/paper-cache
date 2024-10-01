@@ -1,5 +1,9 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
-use crate::policy::{PaperPolicy, PolicyStack, PolicyStackType};
+
+use crate::{
+	policy::PaperPolicy,
+	worker::policy::{PolicyStack, PolicyStackType},
+};
 
 // the sampling modulus must be a power of 2
 const SAMPLING_MODULUS: u64 = 16777216;

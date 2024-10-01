@@ -1,3 +1,5 @@
+mod policy_stack;
+mod mini_stack;
 mod event;
 mod trace;
 
@@ -27,6 +29,7 @@ use crate::{
 	cache::{CacheSize, ObjectMapRef, StatsRef, OverheadManagerRef, erase},
 	object::ObjectSize,
 	error::CacheError,
+	policy::PaperPolicy,
 	worker::{
 		Worker,
 		WorkerEvent,
@@ -35,13 +38,9 @@ use crate::{
 		policy::{
 			event::StackEvent,
 			trace::TraceWorker,
+			policy_stack::{PolicyStack, PolicyStackType},
+			mini_stack::MiniStackType,
 		},
-	},
-	policy::{
-		PaperPolicy,
-		PolicyStack,
-		PolicyStackType,
-		MiniStackType,
 	},
 };
 
@@ -122,7 +121,7 @@ where
 				}
 
 				if let Some(stack_event) = StackEvent::<K>::maybe_from_worker_event(&event) {
-					if self.mini_policy_index.is_none() {
+					if self.policy_stack.is_some() {
 						self.trace_worker
 							.send(stack_event)
 							.map_err(|_| CacheError::Internal)?;
@@ -315,8 +314,6 @@ where
 		if self.mini_policy_index.is_some() {
 			// the mini policy is still running so stack events should be buffered
 			// until the full stack is reconstructed
-
-			return Ok(());
 		}
 
 		for event in buffered_events.iter() {
@@ -345,7 +342,8 @@ where
 					continue;
 				};
 
-				self.used_cache_size -= self.overhead_manager.total_size(key, &object) as u64;
+				let size = self.overhead_manager.total_size(key, &object);
+				self.used_cache_size -= size as u64;
 
 				buffered_events.push(StackEvent::Del(key));
 			}
