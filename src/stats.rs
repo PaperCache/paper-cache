@@ -94,9 +94,10 @@ impl Stats {
 /// This struct holds the basic statistical information about `PaperCache`
 /// and allows for atomic updates of its fields.
 impl AtomicStats {
-	#[must_use]
-	pub fn new(max_size: CacheSize, policy_index: usize) -> Self {
-		AtomicStats {
+	pub fn new(max_size: CacheSize, policy: PaperPolicy) -> Result<Self, CacheError> {
+		let policy_index = get_policy_index(policy)?;
+
+		let stats = AtomicStats {
 			max_size: AtomicU64::new(max_size),
 			used_size: AtomicU64::default(),
 
@@ -108,7 +109,9 @@ impl AtomicStats {
 			policy_index: AtomicUsize::new(policy_index),
 
 			start_time: AtomicU64::new(time::timestamp()),
-		}
+		};
+
+		Ok(stats)
 	}
 
 	#[must_use]
@@ -146,14 +149,7 @@ impl AtomicStats {
 	}
 
 	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		let maybe_index = POLICIES
-			.iter()
-			.position(|configured_policy| configured_policy.eq(&policy));
-
-		let Some(index) = maybe_index else {
-			return Err(CacheError::Internal);
-		};
-
+		let index = get_policy_index(policy)?;
 		self.policy_index.store(index, Ordering::Relaxed);
 
 		Ok(())
@@ -189,4 +185,11 @@ impl AtomicStats {
 			start_time: self.start_time.load(Ordering::Relaxed),
 		}
 	}
+}
+
+fn get_policy_index(policy: PaperPolicy) -> Result<usize, CacheError> {
+	POLICIES
+		.iter()
+		.position(|configured_policy| configured_policy.eq(&policy))
+		.ok_or(CacheError::Internal)
 }

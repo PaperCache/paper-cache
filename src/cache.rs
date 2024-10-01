@@ -104,7 +104,7 @@ where
 		}
 
 		let objects = Arc::new(DashMap::with_hasher(hasher));
-		let stats = Arc::new(AtomicStats::new(max_size, 0));
+		let stats = Arc::new(AtomicStats::new(max_size, policy)?);
 
 		let overhead_manager = Arc::new(OverheadManager::default());
 
