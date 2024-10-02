@@ -62,7 +62,12 @@ where
 
 			if let Some(expired) = self.expiries.expired(now) {
 				for key in expired {
-					erase(&self.objects, &self.stats, &self.overhead_manager, key).ok();
+					erase(
+						&self.objects,
+						&self.stats,
+						&self.overhead_manager,
+						Some(key),
+					).ok();
 				}
 			}
 

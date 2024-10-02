@@ -257,7 +257,12 @@ where
 	/// assert!(cache.del(1).is_err());
 	/// ```
 	pub fn del(&self, key: K) -> Result<(), CacheError> {
-		let object = erase(&self.objects, &self.stats, &self.overhead_manager, key)?;
+		let (key, object) = erase(
+			&self.objects,
+			&self.stats,
+			&self.overhead_manager,
+			Some(key),
+		)?;
 
 		self.stats.del();
 
@@ -443,13 +448,29 @@ pub fn erase<K, V, S>(
 	objects: &ObjectMapRef<K, V, S>,
 	stats: &StatsRef,
 	overhead_manager: &OverheadManagerRef,
-	key: K,
-) -> Result<Object<V>, CacheError>
+	maybe_key: Option<K>,
+) -> Result<(K, Object<V>), CacheError>
 where
-	K: 'static + Eq + Hash + TypeSize,
+	K: 'static + Copy + Eq + Hash + TypeSize,
 	V: 'static + TypeSize,
 	S: Default + Clone + BuildHasher,
 {
+	let key = match maybe_key {
+		Some(key) => key,
+
+		None => {
+			// the policy has run out of keys to evict (either it's a mini stack or
+			// something went wrong during policy reconstruction) so we fall back
+			// to evicting a random object
+
+			objects
+				.iter()
+				.next()
+				.ok_or(CacheError::Internal)?
+				.key().to_owned()
+		},
+	};
+
 	let (_, object) = objects
 		.remove(&key)
 		.ok_or(CacheError::KeyNotFound)?;
@@ -457,7 +478,7 @@ where
 	stats.decrease_used_size(overhead_manager.total_size(key, &object).into());
 
 	match !object.is_expired() {
-		true => Ok(object),
+		true => Ok((key, object)),
 		false => Err(CacheError::KeyNotFound),
 	}
 }

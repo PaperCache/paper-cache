@@ -140,7 +140,7 @@ where
 
 			self.apply_buffered_events(&buffered_events, &policy_reconstruct_rx);
 			self.flush_buffered_events(&mut buffered_events)?;
-			self.apply_evictions(&mut buffered_events);
+			self.apply_evictions(&mut buffered_events)?;
 
 			let now = time::timestamp();
 
@@ -332,27 +332,38 @@ where
 		Ok(())
 	}
 
-	fn apply_evictions(&mut self, buffered_events: &mut Vec<StackEvent<K>>) {
+	fn apply_evictions(
+		&mut self,
+		buffered_events: &mut Vec<StackEvent<K>>,
+	) -> Result<(), CacheError> {
 		if let Some(index) = self.mini_policy_index {
-			return self.apply_mini_evictions(index, buffered_events);
+			self.apply_mini_evictions(index, buffered_events);
+			return Ok(());
 		}
 
-		if let Some(stack) = self.policy_stack.as_mut() {
-			while self.used_cache_size > self.max_cache_size {
-				let Some(key) = stack.pop() else {
-					continue;
-				};
+		let stack = self.policy_stack
+			.as_mut()
+			.ok_or(CacheError::Internal)?;
 
-				let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) else {
-					continue;
-				};
+		while self.used_cache_size > self.max_cache_size {
+			let erase_result = erase(
+				&self.objects,
+				&self.stats,
+				&self.overhead_manager,
+				stack.pop(),
+			);
 
-				let size = self.overhead_manager.total_size(key, &object);
-				self.used_cache_size -= size as u64;
+			let Ok((key, object)) = erase_result else {
+				continue;
+			};
 
-				buffered_events.push(StackEvent::Del(key));
-			}
+			let size = self.overhead_manager.total_size(key, &object);
+			self.used_cache_size -= size as u64;
+
+			buffered_events.push(StackEvent::Del(key));
 		}
+
+		Ok(())
 	}
 
 	fn apply_mini_evictions(
@@ -364,15 +375,14 @@ where
 		let mut evictions = Vec::<K>::new();
 
 		while self.used_cache_size > self.max_cache_size {
-			let Some(key) = mini_policy_stack.pop() else {
-				// the mini stack is empty, but it's okay because the cache will just use
-				// a little more memory until the policy stack is reconstructed, so we want
-				// to be sure we don't get stuck here
+			let erase_result = erase(
+				&self.objects,
+				&self.stats,
+				&self.overhead_manager,
+				mini_policy_stack.pop(),
+			);
 
-				break;
-			};
-
-			let Ok(object) = erase(&self.objects, &self.stats, &self.overhead_manager, key) else {
+			let Ok((key, object)) = erase_result else {
 				continue;
 			};
 
