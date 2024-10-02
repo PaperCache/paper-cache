@@ -99,6 +99,7 @@ where
 
 			StackEvent::Wipe => {
 				buf.push(EventByte::WIPE);
+				buf.extend_from_slice(&vec![0u8; K::size()]);
 			},
 		}
 
