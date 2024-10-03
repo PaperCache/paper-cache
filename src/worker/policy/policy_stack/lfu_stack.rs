@@ -1,13 +1,17 @@
-use std::hash::Hash;
-use rustc_hash::FxHashMap;
+use std::{
+	hash::{Hash, BuildHasher},
+	collections::HashMap,
+};
+
 use dlv_list::{VecList, Index};
 use crate::worker::policy::policy_stack::PolicyStack;
 
-pub struct LfuStack<K>
+pub struct LfuStack<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
-	index_map: FxHashMap<K, KeyIndex<K>>,
+	index_map: HashMap<K, KeyIndex<K>, S>,
 	count_lists: VecList<CountList<K>>,
 }
 
@@ -21,10 +25,18 @@ struct KeyIndex<K> {
 	list_index: Index<K>,
 }
 
-impl<K> PolicyStack<K> for LfuStack<K>
+impl<K, S> PolicyStack<K, S> for LfuStack<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
+	fn with_hasher(hasher: S) -> Self {
+		LfuStack {
+			index_map: HashMap::with_hasher(hasher),
+			count_lists: VecList::default(),
+		}
+	}
+
 	fn insert(&mut self, key: K) {
 		if self.index_map.contains_key(&key) {
 			return self.update(key);
@@ -149,18 +161,6 @@ impl<K> CountList<K> {
 	}
 }
 
-impl<K> Default for LfuStack<K>
-where
-	K: Copy + Eq + Hash,
-{
-	fn default() -> Self {
-		LfuStack {
-			index_map: FxHashMap::default(),
-			count_lists: VecList::default(),
-		}
-	}
-}
-
 impl<K> KeyIndex<K> {
 	fn new(
 		count_list_index: Index<CountList<K>>,
@@ -177,12 +177,13 @@ impl<K> KeyIndex<K> {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
+		use std::hash::RandomState;
 		use crate::worker::policy::policy_stack::{PolicyStack, LfuStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
 		let mut evictions: Vec<u32> = vec![0, 1, 2, 3];
 
-		let mut stack = LfuStack::<u32>::default();
+		let mut stack = LfuStack::<u32, RandomState>::with_hasher(RandomState::default());
 
 		for access in accesses {
 			stack.insert(access);

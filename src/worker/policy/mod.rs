@@ -55,7 +55,7 @@ pub struct PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + Send + BuildHasher,
 {
 	listener: Receiver<WorkerEvent<K>>,
 
@@ -65,15 +65,17 @@ where
 
 	max_cache_size: CacheSize,
 	used_cache_size: CacheSize,
-	policy_stack: Option<PolicyStackType<K>>,
+	policy_stack: Option<PolicyStackType<K, S>>,
 
 	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	trace_worker: Sender<StackEvent<K>>,
 
-	mini_policy_stacks: Box<[MiniStackType<K>]>,
+	mini_policy_stacks: Box<[MiniStackType<K, S>]>,
 	mini_policy_index: Option<usize>,
 
 	last_set_time: Option<u64>,
+
+	hasher: S,
 }
 
 impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
@@ -81,13 +83,13 @@ where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + Send + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		let (
 			policy_reconstruct_tx,
 			policy_reconstruct_rx,
-		) = unbounded::<PolicyStackType<K>>();
+		) = unbounded::<PolicyStackType<K, S>>();
 
 		let policy_reconstruct_tx = Arc::new(policy_reconstruct_tx);
 		let mut buffered_events = Vec::<StackEvent<K>>::new();
@@ -165,20 +167,21 @@ impl<K, V, S> PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: 'static + Default + Clone + BuildHasher,
+	S: 'static + Clone + Send + BuildHasher,
 {
-	pub fn new(
+	pub fn with_hasher(
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
 		policy: PaperPolicy,
+		hasher: S,
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
 		let mini_policy_stacks = POLICIES
 			.iter()
-			.map(|policy| policy.into())
+			.map(|policy| MiniStackType::<K, S>::init_with_hasher(*policy, hasher.clone()))
 			.collect::<Box<[_]>>();
 
 		let traces = Arc::new(RwLock::new(VecDeque::new()));
@@ -199,7 +202,7 @@ where
 			max_cache_size,
 			used_cache_size: 0,
 
-			policy_stack: Some(policy.into()),
+			policy_stack: Some(PolicyStackType::<K, S>::init_with_hasher(policy, hasher.clone())),
 
 			traces,
 			trace_worker,
@@ -208,6 +211,8 @@ where
 			mini_policy_index: None,
 
 			last_set_time: None,
+
+			hasher,
 		}
 	}
 
@@ -250,7 +255,7 @@ where
 	fn handle_policy(
 		&mut self,
 		policy: PaperPolicy,
-		policy_reconstruct_tx: Arc<Sender<PolicyStackType<K>>>,
+		policy_reconstruct_tx: Arc<Sender<PolicyStackType<K, S>>>,
 	) {
 		let is_current_policy = self.policy_stack
 			.as_ref()
@@ -269,11 +274,13 @@ where
 		self.mini_policy_index = Some(mini_policy_index);
 
 		let traces = self.traces.clone();
+		let hasher = self.hasher.clone();
 
 		thread::spawn(move || {
-			let reconstruction_result = reconstruct_policy_stack::<K>(
+			let reconstruction_result = reconstruct_policy_stack::<K, S>(
 				policy,
 				traces.clone(),
+				hasher,
 			);
 
 			if let Ok(stack) = reconstruction_result {
@@ -295,7 +302,7 @@ where
 	fn apply_buffered_events(
 		&mut self,
 		buffered_events: &[StackEvent<K>],
-		policy_reconstruct_rx: &Receiver<PolicyStackType<K>>,
+		policy_reconstruct_rx: &Receiver<PolicyStackType<K, S>>,
 	) {
 		for mut stack in policy_reconstruct_rx.try_iter() {
 			for event in buffered_events {
@@ -403,14 +410,16 @@ where
 	}
 }
 
-fn reconstruct_policy_stack<K>(
+fn reconstruct_policy_stack<K, S>(
 	policy: PaperPolicy,
 	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
-) -> Result<PolicyStackType<K>, CacheError>
+	hasher: S,
+) -> Result<PolicyStackType<K, S>, CacheError>
 where
 	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	S: Clone + Send + BuildHasher,
 {
-	let mut stack: PolicyStackType<K> = policy.into();
+	let mut stack = PolicyStackType::<K, S>::init_with_hasher(policy, hasher);
 
 	for (_, file) in traces.read().iter() {
 		let mut file = file
@@ -451,5 +460,5 @@ unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + Send + BuildHasher,
 {}

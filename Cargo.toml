@@ -1,10 +1,9 @@
 [package]
 name = "paper_cache"
-version = "1.5.4"
+version = "1.5.5"
 edition = "2021"
 
 [dependencies]
-rustc-hash = "2.0.0"
 dlv-list = "0.5.2"
 kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.10.1" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.2.1" }

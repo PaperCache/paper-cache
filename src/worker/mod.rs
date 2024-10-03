@@ -40,7 +40,7 @@ where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError>;
 }
@@ -49,7 +49,7 @@ pub fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	thread::spawn(move || worker.run());
 }

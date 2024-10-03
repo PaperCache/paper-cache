@@ -1,3 +1,5 @@
+mod expiries;
+
 use std::{
 	thread,
 	hash::{Hash, BuildHasher},
@@ -14,15 +16,19 @@ use kwik::{
 use crate::{
 	cache::{ObjectMapRef, StatsRef, OverheadManagerRef, erase},
 	error::CacheError,
-	worker::{Worker, WorkerEvent, WorkerReceiver},
-	expiries::Expiries,
+	worker::{
+		Worker,
+		WorkerEvent,
+		WorkerReceiver,
+		ttl::expiries::Expiries,
+	},
 };
 
 pub struct TtlWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	listener: WorkerReceiver<K>,
 
@@ -30,7 +36,7 @@ where
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
-	expiries: Expiries<K>,
+	expiries: Expiries<K, S>,
 }
 
 impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
@@ -38,7 +44,7 @@ where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
@@ -85,13 +91,14 @@ impl<K, V, S> TtlWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
-	pub fn new(
+	pub fn with_hasher(
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
+		hasher: S,
 	) -> Self {
 		TtlWorker {
 			listener,
@@ -100,7 +107,7 @@ where
 			stats,
 			overhead_manager,
 
-			expiries: Expiries::default(),
+			expiries: Expiries::with_hasher(hasher),
 		}
 	}
 }

@@ -36,21 +36,21 @@ impl Default for OverheadManager {
 		let policies_overhead_per_object = POLICIES
 			.iter()
 			.map(|policy| match policy {
-				// 8 bytes for the key of the FxHashMap, 16 bytes for KeyIndex, 8 bytes for the CountList
+				// 8 bytes for the key of the HashMap, 16 bytes for KeyIndex, 8 bytes for the CountList
 				PaperPolicy::Lfu => 32,
 
-				// 16 bytes for the key and value of the FxHashMap, 8 bytes for the VecList
+				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
 				PaperPolicy::Fifo => 24,
 
-				// 16 bytes for the key and value of the FxHashMap, 8 bytes for the VecList
+				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
 				PaperPolicy::Lru => 24,
 
-				// 16 bytes for the key and value of the FxHashMap, 8 bytes for the VecList
+				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
 				PaperPolicy::Mru => 24,
 			})
 			.sum();
 
-		// 8 bytes for the key in the BTreeMap, 8 bytes for the entry in the FxHashSet
+		// 8 bytes for the key in the BTreeMap, 8 bytes for the entry in the HashSet
 		let ttl_overhead_per_object = 16;
 
 		OverheadManager {

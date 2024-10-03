@@ -1,20 +1,32 @@
-use std::hash::Hash;
-use rustc_hash::FxHashMap;
+use std::{
+	hash::{Hash, BuildHasher},
+	collections::HashMap,
+};
+
 use dlv_list::{VecList, Index};
 use crate::worker::policy::policy_stack::PolicyStack;
 
-pub struct LruStack<K>
+pub struct LruStack<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
-	map: FxHashMap<K, Index<K>>,
+	map: HashMap<K, Index<K>, S>,
 	stack: VecList<K>,
 }
 
-impl<K> PolicyStack<K> for LruStack<K>
+impl<K, S> PolicyStack<K, S> for LruStack<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
+	fn with_hasher(hasher: S) -> Self {
+		LruStack {
+			map: HashMap::with_hasher(hasher),
+			stack: VecList::default(),
+		}
+	}
+
 	fn insert(&mut self, key: K) {
 		if self.map.contains_key(&key) {
 			return self.update(key);
@@ -55,28 +67,17 @@ where
 	}
 }
 
-impl<K> Default for LruStack<K>
-where
-	K: Copy + Eq + Hash,
-{
-	fn default() -> Self {
-		LruStack {
-			map: FxHashMap::default(),
-			stack: VecList::default(),
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
+		use std::hash::RandomState;
 		use crate::worker::policy::policy_stack::{PolicyStack, LruStack};
 
 		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
 		let mut evictions: Vec<u32> = vec![0, 2, 3, 1];
 
-		let mut stack = LruStack::<u32>::default();
+		let mut stack = LruStack::<u32, RandomState>::with_hasher(RandomState::default());
 
 		for access in accesses {
 			stack.insert(access);

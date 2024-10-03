@@ -3,8 +3,7 @@ use std::{
 		Arc,
 		atomic::AtomicU64,
 	},
-	hash::{Hash, BuildHasher},
-	collections::hash_map::RandomState,
+	hash::{Hash, BuildHasher, RandomState},
 	thread,
 };
 
@@ -48,7 +47,7 @@ pub struct PaperCache<K, V, S = RandomState>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + BuildHasher + Clone,
+	S: Default + Clone + Send + BuildHasher,
 {
 	objects: ObjectMapRef<K, V, S>,
 	stats: StatsRef,
@@ -61,7 +60,7 @@ impl<K, V, S> PaperCache<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: 'static + Default + Clone + BuildHasher,
+	S: 'static + Default + Clone + Send + BuildHasher,
 {
 	/// Creates an empty `PaperCache` with maximum size `max_size` and
 	/// eviction policy `policy`. If the maximum size is zero, a
@@ -89,7 +88,7 @@ where
 	/// # Examples
 	///
 	/// ```
-	/// use std::collections::hash_map::RandomState;
+	/// use std::hash::RandomState;
 	/// use paper_cache::{PaperCache, PaperPolicy};
 	///
 	/// assert!(PaperCache::<u32, u32>::with_hasher(1000, PaperPolicy::Lru, RandomState::default()).is_ok());
@@ -103,19 +102,20 @@ where
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		let objects = Arc::new(DashMap::with_hasher(hasher));
+		let objects = Arc::new(DashMap::with_hasher(hasher.clone()));
 		let stats = Arc::new(AtomicStats::new(max_size, policy)?);
 
 		let overhead_manager = Arc::new(OverheadManager::default());
 
 		let (worker_sender, worker_listener) = unbounded();
 
-		let mut worker_manager = WorkerManager::new(
+		let mut worker_manager = WorkerManager::with_hasher(
 			worker_listener,
 			&objects,
 			&stats,
 			&overhead_manager,
 			policy,
+			hasher,
 		);
 
 		thread::spawn(move || worker_manager.run());
@@ -453,7 +453,7 @@ pub fn erase<K, V, S>(
 where
 	K: 'static + Copy + Eq + Hash + TypeSize,
 	V: 'static + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	let key = match maybe_key {
 		Some(key) => key,
@@ -487,5 +487,5 @@ unsafe impl<K, V, S> Send for PaperCache<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Default + Clone + Send + BuildHasher,
 {}

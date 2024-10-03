@@ -1,5 +1,4 @@
 mod error;
-mod expiries;
 mod worker;
 mod cache;
 mod object;

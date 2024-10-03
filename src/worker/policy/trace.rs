@@ -34,7 +34,7 @@ pub struct TraceWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	listener: Receiver<StackEvent<K>>,
 
@@ -50,7 +50,7 @@ where
 	Self: 'static + Send,
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
@@ -76,7 +76,7 @@ impl<K, V, S> TraceWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {
 	pub fn new(
 		listener: Receiver<StackEvent<K>>,
@@ -144,5 +144,5 @@ unsafe impl<K, V, S> Send for TraceWorker<K, V, S>
 where
 	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
+	S: Clone + BuildHasher,
 {}

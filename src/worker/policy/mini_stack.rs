@@ -1,4 +1,4 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{DefaultHasher, Hash, Hasher, BuildHasher};
 
 use crate::{
 	policy::PaperPolicy,
@@ -9,20 +9,26 @@ use crate::{
 const SAMPLING_MODULUS: u64 = 16777216;
 const SAMPLING_THRESHOLD: u64 = 16777;
 
-pub enum MiniStackType<K>
+pub enum MiniStackType<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
-	Lfu(PolicyStackType<K>),
-	Fifo(PolicyStackType<K>),
-	Lru(PolicyStackType<K>),
-	Mru(PolicyStackType<K>),
+	Lfu(PolicyStackType<K, S>),
+	Fifo(PolicyStackType<K, S>),
+	Lru(PolicyStackType<K, S>),
+	Mru(PolicyStackType<K, S>),
 }
 
-impl<K> PolicyStack<K> for MiniStackType<K>
+impl<K, S> PolicyStack<K, S> for MiniStackType<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
+	fn with_hasher(_hasher: S) -> Self {
+		unreachable!();
+	}
+
 	fn insert(&mut self, key: K) {
 		if !should_sample(key) {
 			return;
@@ -73,10 +79,23 @@ where
 	}
 }
 
-impl<K> MiniStackType<K>
+impl<K, S> MiniStackType<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
+	#[must_use]
+	pub fn init_with_hasher(policy: PaperPolicy, hasher: S) -> Self {
+		let policy_stack = PolicyStackType::<K, S>::init_with_hasher(policy, hasher);
+
+		match policy {
+			PaperPolicy::Lfu => MiniStackType::Lfu(policy_stack),
+			PaperPolicy::Fifo => MiniStackType::Fifo(policy_stack),
+			PaperPolicy::Lru => MiniStackType::Lru(policy_stack),
+			PaperPolicy::Mru => MiniStackType::Mru(policy_stack),
+		}
+	}
+
 	#[must_use]
 	pub fn is_policy(&self, policy: PaperPolicy) -> bool {
 		matches!(
@@ -86,29 +105,6 @@ where
 			| (PaperPolicy::Lru, MiniStackType::Lru(_))
 			| (PaperPolicy::Mru, MiniStackType::Mru(_))
 		)
-	}
-}
-
-impl<K> From<PaperPolicy> for MiniStackType<K>
-where
-	K: Copy + Eq + Hash,
-{
-	fn from(policy: PaperPolicy) -> Self {
-		(&policy).into()
-	}
-}
-
-impl<K> From<&PaperPolicy> for MiniStackType<K>
-where
-	K: Copy + Eq + Hash,
-{
-	fn from(policy: &PaperPolicy) -> Self {
-		match policy {
-			PaperPolicy::Lfu => MiniStackType::Lfu(policy.into()),
-			PaperPolicy::Fifo => MiniStackType::Fifo(policy.into()),
-			PaperPolicy::Lru => MiniStackType::Lru(policy.into()),
-			PaperPolicy::Mru => MiniStackType::Mru(policy.into()),
-		}
 	}
 }
 

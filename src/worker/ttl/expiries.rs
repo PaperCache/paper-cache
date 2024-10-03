@@ -1,22 +1,31 @@
 use std::{
-	hash::Hash,
-	collections::BTreeMap,
+	hash::{Hash, BuildHasher},
+	collections::{BTreeMap, HashSet},
 };
 
-use rustc_hash::FxHashSet;
 use crate::object::{ExpireTime, get_expiry_from_ttl};
 
-pub struct Expiries<K>
+pub struct Expiries<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
-	map: BTreeMap<u64, FxHashSet<K>>,
+	map: BTreeMap<u64, HashSet<K, S>>,
+	hasher: S,
 }
 
-impl<K> Expiries<K>
+impl<K, S> Expiries<K, S>
 where
 	K: Copy + Eq + Hash,
+	S: Clone + BuildHasher,
 {
+	pub fn with_hasher(hasher: S) -> Self {
+		Expiries {
+			map: BTreeMap::default(),
+			hasher,
+		}
+	}
+
 	pub fn has_within(&self, ttl: u32) -> bool {
 		let Some((nearest_expiry, _)) = self.map.first_key_value() else {
 			return false;
@@ -33,7 +42,7 @@ where
 		if let Some(keys) = self.map.get_mut(&expiry) {
 			keys.insert(key);
 		} else {
-			let mut keys = FxHashSet::default();
+			let mut keys = HashSet::with_hasher(self.hasher.clone());
 			keys.insert(key);
 
 			self.map.insert(expiry, keys);
@@ -56,7 +65,7 @@ where
 		}
 	}
 
-	pub fn expired(&mut self, now: u64) -> Option<FxHashSet<K>> {
+	pub fn expired(&mut self, now: u64) -> Option<HashSet<K, S>> {
 		let first_expiry = self.map
 			.first_key_value()
 			.map(|(expiry, _)| expiry)?;
@@ -70,16 +79,5 @@ where
 
 	pub fn clear(&mut self) {
 		self.map.clear();
-	}
-}
-
-impl<K> Default for Expiries<K>
-where
-	K: Copy + Eq + Hash,
-{
-	fn default() -> Self {
-		Expiries {
-			map: BTreeMap::default(),
-		}
 	}
 }
