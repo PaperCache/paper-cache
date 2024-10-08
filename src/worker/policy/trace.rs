@@ -65,7 +65,8 @@ where
 			}
 
 			self.get_writer()?
-				.flush().map_err(|_| CacheError::Internal)?;
+				.flush()
+				.map_err(|_| CacheError::Internal)?;
 
 			thread::sleep(POLL_DELAY);
 		}

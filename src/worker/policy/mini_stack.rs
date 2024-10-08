@@ -2,7 +2,13 @@ use std::hash::{DefaultHasher, Hash, Hasher, BuildHasher};
 
 use crate::{
 	policy::PaperPolicy,
-	worker::policy::{PolicyStack, PolicyStackType},
+	worker::policy::policy_stack::{
+		PolicyStack,
+		LfuStack,
+		FifoStack,
+		LruStack,
+		MruStack,
+	},
 };
 
 // the sampling modulus must be a power of 2
@@ -14,10 +20,10 @@ where
 	K: Copy + Eq + Hash,
 	S: Clone + BuildHasher,
 {
-	Lfu(PolicyStackType<K, S>),
-	Fifo(PolicyStackType<K, S>),
-	Lru(PolicyStackType<K, S>),
-	Mru(PolicyStackType<K, S>),
+	Lfu(Box<LfuStack<K, S>>),
+	Fifo(Box<FifoStack<K, S>>),
+	Lru(Box<LruStack<K, S>>),
+	Mru(Box<MruStack<K, S>>),
 }
 
 impl<K, S> PolicyStack<K, S> for MiniStackType<K, S>
@@ -26,7 +32,7 @@ where
 	S: Clone + BuildHasher,
 {
 	fn with_hasher(_hasher: S) -> Self {
-		unreachable!();
+		unimplemented!();
 	}
 
 	fn insert(&mut self, key: K) {
@@ -86,13 +92,11 @@ where
 {
 	#[must_use]
 	pub fn init_with_hasher(policy: PaperPolicy, hasher: S) -> Self {
-		let policy_stack = PolicyStackType::<K, S>::init_with_hasher(policy, hasher);
-
 		match policy {
-			PaperPolicy::Lfu => MiniStackType::Lfu(policy_stack),
-			PaperPolicy::Fifo => MiniStackType::Fifo(policy_stack),
-			PaperPolicy::Lru => MiniStackType::Lru(policy_stack),
-			PaperPolicy::Mru => MiniStackType::Mru(policy_stack),
+			PaperPolicy::Lfu => MiniStackType::Lfu(Box::new(LfuStack::with_hasher(hasher))),
+			PaperPolicy::Fifo => MiniStackType::Fifo(Box::new(FifoStack::with_hasher(hasher))),
+			PaperPolicy::Lru => MiniStackType::Lru(Box::new(LruStack::with_hasher(hasher))),
+			PaperPolicy::Mru => MiniStackType::Mru(Box::new(MruStack::with_hasher(hasher))),
 		}
 	}
 
@@ -116,5 +120,6 @@ where
 	key.hash(&mut s);
 	let hashed = s.finish();
 
+	// this optimization only works if the sampling modulus is a power of 2
 	hashed & (SAMPLING_MODULUS - 1) < SAMPLING_THRESHOLD
 }
