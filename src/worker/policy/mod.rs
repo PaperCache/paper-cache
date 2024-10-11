@@ -72,6 +72,7 @@ where
 
 	mini_policy_stacks: Box<[MiniStackType<K, S>]>,
 	mini_policy_index: Option<usize>,
+	current_policy: Arc<RwLock<PaperPolicy>>,
 
 	last_set_time: Option<u64>,
 
@@ -184,6 +185,11 @@ where
 			.map(|policy| MiniStackType::<K, S>::init_with_hasher(*policy, hasher.clone()))
 			.collect::<Box<[_]>>();
 
+		let policy_stack = PolicyStackType::<K, S>::init_with_hasher(
+			policy,
+			hasher.clone(),
+		);
+
 		let traces = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
 
@@ -202,13 +208,15 @@ where
 			max_cache_size,
 			used_cache_size: 0,
 
-			policy_stack: Some(PolicyStackType::<K, S>::init_with_hasher(policy, hasher.clone())),
+			policy_stack: Some(policy_stack),
 
 			traces,
 			trace_worker,
 
 			mini_policy_stacks,
 			mini_policy_index: None,
+
+			current_policy: Arc::new(RwLock::new(policy)),
 
 			last_set_time: None,
 
@@ -257,13 +265,11 @@ where
 		policy: PaperPolicy,
 		policy_reconstruct_tx: Arc<Sender<PolicyStackType<K, S>>>,
 	) {
-		let is_current_policy = self.policy_stack
-			.as_ref()
-			.is_some_and(|policy_stack| policy_stack.is_policy(policy));
-
-		if is_current_policy {
+		if policy == *self.current_policy.read() {
 			return;
 		}
+
+		*self.current_policy.write() = policy;
 
 		let mini_policy_index = self.mini_policy_stacks
 			.iter()
@@ -273,18 +279,24 @@ where
 		self.policy_stack = None;
 		self.mini_policy_index = Some(mini_policy_index);
 
+		let current_policy = self.current_policy.clone();
 		let traces = self.traces.clone();
 		let hasher = self.hasher.clone();
 
 		thread::spawn(move || {
 			let reconstruction_result = reconstruct_policy_stack::<K, S>(
 				policy,
+				current_policy.clone(),
 				traces.clone(),
 				hasher,
 			);
 
 			if let Ok(stack) = reconstruction_result {
-				let _ = policy_reconstruct_tx.send(stack);
+				// check to make sure the configured policy was not modified
+				// before sending the reconstructed stack
+				if policy == *current_policy.read() {
+					let _ = policy_reconstruct_tx.send(stack);
+				}
 			}
 		});
 	}
@@ -412,6 +424,7 @@ where
 
 fn reconstruct_policy_stack<K, S>(
 	policy: PaperPolicy,
+	current_policy: Arc<RwLock<PaperPolicy>>,
 	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	hasher: S,
 ) -> Result<PolicyStackType<K, S>, CacheError>
@@ -436,7 +449,19 @@ where
 		let mut reader = BinaryReader::<StackEvent<K>>::from_file(file)
 			.map_err(|_| CacheError::Internal)?;
 
-		for event in reader.iter() {
+		for (index, event) in reader.iter().enumerate() {
+			if index % 1_000_000 == 0 && policy != *current_policy.read() {
+				// every 1_000_000 events, check if the currently configured policy
+				// is still the policy we're reconstructing and if it's not, move the
+				// reader back to its original position in the file and terminate
+				// the reconstruction
+				reader
+					.offset(initial_position)
+					.map_err(|_| CacheError::Internal)?;
+
+				return Err(CacheError::Internal);
+			}
+
 			match event {
 				StackEvent::Get(key) => stack.update(key),
 				StackEvent::Set(key) => stack.insert(key),
