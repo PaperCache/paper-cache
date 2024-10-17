@@ -4,7 +4,16 @@ mod mru_stack;
 mod fifo_stack;
 
 use std::hash::{Hash, BuildHasher};
-use crate::policy::PaperPolicy;
+
+use crate::{
+	policy::PaperPolicy,
+	worker::policy::policy_stack::{
+		lfu_stack::LfuStack,
+		lru_stack::LruStack,
+		mru_stack::MruStack,
+		fifo_stack::FifoStack,
+	},
+};
 
 pub trait PolicyStack<K, S>
 where
@@ -140,10 +149,3 @@ where
 		)
 	}
 }
-
-pub use crate::worker::policy::policy_stack::{
-	lfu_stack::*,
-	lru_stack::*,
-	mru_stack::*,
-	fifo_stack::*,
-};

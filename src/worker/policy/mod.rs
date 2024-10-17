@@ -1,5 +1,4 @@
 mod policy_stack;
-mod mini_stack;
 mod event;
 mod trace;
 
@@ -46,10 +45,13 @@ use crate::{
 			event::StackEvent,
 			trace::TraceWorker,
 			policy_stack::{PolicyStack, PolicyStackType},
-			mini_stack::MiniStackType,
 		},
 	},
 };
+
+// the sampling modulus must be a power of 2
+const MINI_SAMPLING_MODULUS: u64 = 16777216;
+const MINI_SAMPLING_THRESHOLD: u64 = 16777;
 
 pub struct PolicyWorker<K, V, S>
 where
@@ -70,12 +72,13 @@ where
 	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
 	trace_worker: Sender<StackEvent<K>>,
 
-	mini_policy_stacks: Box<[MiniStackType<K, S>]>,
+	mini_policy_stacks: Box<[PolicyStackType<K, S>]>,
 	mini_policy_index: Option<usize>,
 	current_policy: Arc<RwLock<PaperPolicy>>,
 
 	last_set_time: Option<u64>,
 
+	mini_stack_hasher: S,
 	hasher: S,
 }
 
@@ -182,7 +185,7 @@ where
 
 		let mini_policy_stacks = POLICIES
 			.iter()
-			.map(|policy| MiniStackType::<K, S>::init_with_hasher(*policy, hasher.clone()))
+			.map(|policy| PolicyStackType::<K, S>::init_with_hasher(*policy, hasher.clone()))
 			.collect::<Box<[_]>>();
 
 		let policy_stack = PolicyStackType::<K, S>::init_with_hasher(
@@ -220,6 +223,7 @@ where
 
 			last_set_time: None,
 
+			mini_stack_hasher: hasher.clone(),
 			hasher,
 		}
 	}
@@ -229,8 +233,10 @@ where
 			stack.update(key);
 		}
 
-		for mini_stack in &mut self.mini_policy_stacks {
-			mini_stack.update(key);
+		if self.should_mini_sample(key) {
+			for mini_stack in &mut self.mini_policy_stacks {
+				mini_stack.update(key);
+			}
 		}
 	}
 
@@ -239,8 +245,10 @@ where
 			stack.insert(key);
 		}
 
-		for mini_stack in &mut self.mini_policy_stacks {
-			mini_stack.insert(key);
+		if self.should_mini_sample(key) {
+			for mini_stack in &mut self.mini_policy_stacks {
+				mini_stack.insert(key);
+			}
 		}
 
 		self.used_cache_size += size as u64;
@@ -255,8 +263,10 @@ where
 			stack.remove(key);
 		}
 
-		for mini_stack in &mut self.mini_policy_stacks {
-			mini_stack.remove(key);
+		if self.should_mini_sample(key) {
+			for mini_stack in &mut self.mini_policy_stacks {
+				mini_stack.remove(key);
+			}
 		}
 	}
 
@@ -419,6 +429,13 @@ where
 				}
 			}
 		}
+	}
+
+	fn should_mini_sample(&self, key: K) -> bool {
+		let hashed = self.mini_stack_hasher.hash_one(key);
+
+		// this optimization only works if the sampling modulus is a power of 2
+		hashed & (MINI_SAMPLING_MODULUS - 1) < MINI_SAMPLING_THRESHOLD
 	}
 }
 
