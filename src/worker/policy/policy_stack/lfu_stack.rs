@@ -42,7 +42,7 @@ where
 			return self.update(key);
 		}
 
-		if !self.count_lists.front().is_some_and(|count_list| count_list.count == 1) {
+		if self.count_lists.front().is_none_or(|count_list| count_list.count != 1) {
 			self.count_lists.push_front(CountList::new(1));
 		}
 
