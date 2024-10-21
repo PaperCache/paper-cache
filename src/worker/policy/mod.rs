@@ -6,9 +6,8 @@ use std::{
 	thread,
 	sync::Arc,
 	hash::{Hash, BuildHasher},
-	time::{Instant, Duration},
-	io::Seek,
-	fs::File,
+	time::Duration,
+	io::{Seek, SeekFrom},
 	collections::VecDeque,
 };
 
@@ -18,10 +17,7 @@ use crossbeam_channel::{Sender, Receiver, unbounded};
 
 use kwik::{
 	time,
-	file::{
-		FileReader,
-		binary::{BinaryReader, ReadChunk, WriteChunk},
-	},
+	file::binary::{ReadChunk, WriteChunk},
 };
 
 use crate::{
@@ -43,15 +39,18 @@ use crate::{
 		register_worker,
 		policy::{
 			event::StackEvent,
-			trace::TraceWorker,
+			trace::{TraceWorker, TraceFragment},
 			policy_stack::{PolicyStack, PolicyStackType},
 		},
 	},
 };
 
 // the sampling modulus must be a power of 2
-const MINI_SAMPLING_MODULUS: u64 = 16777216;
-const MINI_SAMPLING_THRESHOLD: u64 = 16777;
+const MINI_SAMPLING_MODULUS: u64 = 16_777_216;
+const MINI_SAMPLING_THRESHOLD: u64 = 16_777;
+
+// the polling value must be a power of 2
+const RECONSTRUCT_POLICY_POLLING: usize = 1_048_576;
 
 pub struct PolicyWorker<K, V, S>
 where
@@ -69,7 +68,7 @@ where
 	used_cache_size: CacheSize,
 	policy_stack: Option<PolicyStackType<K, S>>,
 
-	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
 	trace_worker: Sender<StackEvent<K>>,
 
 	mini_policy_stacks: Box<[PolicyStackType<K, S>]>,
@@ -193,12 +192,12 @@ where
 			hasher.clone(),
 		);
 
-		let traces = Arc::new(RwLock::new(VecDeque::new()));
+		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
 
 		register_worker(TraceWorker::<K, V, S>::new(
 			trace_listener,
-			traces.clone(),
+			trace_fragments.clone(),
 		));
 
 		PolicyWorker {
@@ -213,7 +212,7 @@ where
 
 			policy_stack: Some(policy_stack),
 
-			traces,
+			trace_fragments,
 			trace_worker,
 
 			mini_policy_stacks,
@@ -290,14 +289,14 @@ where
 		self.mini_policy_index = Some(mini_policy_index);
 
 		let current_policy = self.current_policy.clone();
-		let traces = self.traces.clone();
+		let trace_fragments = self.trace_fragments.clone();
 		let hasher = self.hasher.clone();
 
 		thread::spawn(move || {
 			let reconstruction_result = reconstruct_policy_stack::<K, S>(
 				policy,
 				current_policy.clone(),
-				traces.clone(),
+				trace_fragments.clone(),
 				hasher,
 			);
 
@@ -442,38 +441,36 @@ where
 fn reconstruct_policy_stack<K, S>(
 	policy: PaperPolicy,
 	current_policy: Arc<RwLock<PaperPolicy>>,
-	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
 	hasher: S,
 ) -> Result<PolicyStackType<K, S>, CacheError>
 where
-	K: 'static + Copy + Eq + Hash + Sync + TypeSize + ReadChunk + WriteChunk,
+	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
 	S: Clone + Send + BuildHasher,
 {
 	let mut stack = PolicyStackType::<K, S>::init_with_hasher(policy, hasher);
 
-	for (_, file) in traces.read().iter() {
-		let mut file = file
-			.try_clone()
-			.map_err(|_| CacheError::Internal)?;
+	for fragment in trace_fragments.read().iter() {
+		let mut fragment_modifiers = fragment.lock();
+		let fragment_reader = &mut fragment_modifiers.0;
 
-		let initial_position = file
+		let initial_position = fragment_reader
 			.stream_position()
 			.map_err(|_| CacheError::Internal)?;
 
 		// start reading the file from the beginning
-		file.rewind().map_err(|_| CacheError::Internal)?;
-
-		let mut reader = BinaryReader::<StackEvent<K>>::from_file(file)
+		fragment_reader
+			.rewind()
 			.map_err(|_| CacheError::Internal)?;
 
-		for (index, event) in reader.iter().enumerate() {
-			if index % 1_000_000 == 0 && policy != *current_policy.read() {
-				// every 1_000_000 events, check if the currently configured policy
-				// is still the policy we're reconstructing and if it's not, move the
-				// reader back to its original position in the file and terminate
-				// the reconstruction
-				reader
-					.offset(initial_position)
+		for (index, event) in fragment_reader.iter().enumerate() {
+			if index & (RECONSTRUCT_POLICY_POLLING - 1) == 0 && policy != *current_policy.read() {
+				// every RECONSTRUCT_POLICY_POLLING events, check if the currently
+				// configured policy is still the policy we're reconstructing and
+				// if it's not, move the reader back to its original position in
+				// the file and terminate the reconstruction
+				fragment_reader
+					.seek(SeekFrom::Start(initial_position))
 					.map_err(|_| CacheError::Internal)?;
 
 				return Err(CacheError::Internal);
@@ -487,11 +484,11 @@ where
 			}
 		}
 
-		// ensure the underlying file is returned back to its original position
-		// (this is mostly just a sanity check as reading the file should
+		// ensure the underlying trace fragment is returned back to its original
+		// position (this is mostly just a sanity check as reading the file should
 		// already return it to the end which should be the orignal position)
-		reader
-			.offset(initial_position)
+		fragment_reader
+			.seek(SeekFrom::Start(initial_position))
 			.map_err(|_| CacheError::Internal)?;
 	}
 

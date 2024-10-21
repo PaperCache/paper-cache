@@ -1,11 +1,11 @@
 [package]
 name = "paper_cache"
-version = "1.5.8"
+version = "1.5.9"
 edition = "2021"
 
 [dependencies]
 dlv-list = "0.5.2"
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.11.0" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.11.6" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.2.1" }
 thiserror = "1.0.64"
 dashmap = "6.1.0"

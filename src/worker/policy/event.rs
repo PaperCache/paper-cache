@@ -50,20 +50,20 @@ impl<K> ReadChunk for StackEvent<K>
 where
 	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
 {
-	fn new(buf: &[u8]) -> std::io::Result<Self> {
+	fn from_chunk(buf: &[u8]) -> std::io::Result<Self> {
 		let event = match buf[0] {
 			EventByte::GET => {
-				let key = K::new(&buf[1..])?;
+				let key = K::from_chunk(&buf[1..])?;
 				StackEvent::Get(key)
 			},
 
 			EventByte::SET => {
-				let key = K::new(&buf[1..])?;
+				let key = K::from_chunk(&buf[1..])?;
 				StackEvent::Set(key)
 			},
 
 			EventByte::DEL => {
-				let key = K::new(&buf[1..])?;
+				let key = K::from_chunk(&buf[1..])?;
 				StackEvent::Del(key)
 			},
 

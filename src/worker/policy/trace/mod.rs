@@ -1,9 +1,10 @@
+mod fragment;
+
 use std::{
 	thread,
 	sync::Arc,
 	hash::{Hash, BuildHasher},
-	time::{Instant, Duration},
-	fs::File,
+	time::Duration,
 	collections::VecDeque,
 	marker::PhantomData,
 };
@@ -11,11 +12,10 @@ use std::{
 use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
-use tempfile::tempfile;
 
 use kwik::file::{
 	FileWriter,
-	binary::{BinaryWriter, ReadChunk, WriteChunk},
+	binary::{ReadChunk, WriteChunk},
 };
 
 use crate::{
@@ -26,8 +26,8 @@ use crate::{
 	},
 };
 
-const TRACE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-const TRACE_REFRESH_AGE: Duration = Duration::from_secs(60 * 60);
+pub use crate::worker::policy::trace::fragment::TraceFragment;
+
 const POLL_DELAY: Duration = Duration::from_secs(1);
 
 pub struct TraceWorker<K, V, S>
@@ -38,8 +38,7 @@ where
 {
 	listener: Receiver<StackEvent<K>>,
 
-	traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
-	current_writer: Option<BinaryWriter<StackEvent<K>>>,
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
 
 	_v_marker: PhantomData<V>,
 	_s_marker: PhantomData<S>,
@@ -58,15 +57,25 @@ where
 				.try_iter()
 				.collect::<Vec<_>>();
 
-			for event in events {
-				self.get_writer()?
-					.write_chunk(&event)
+			if !events.is_empty() {
+				self.refresh_fragments()?;
+
+				let fragments = self.trace_fragments.read();
+				let fragment = fragments.back().ok_or(CacheError::Internal)?;
+
+				let mut modifiers = fragment.lock();
+				let writer = &mut modifiers.1;
+
+				for event in events {
+					writer
+						.write_chunk(&event)
+						.map_err(|_| CacheError::Internal)?;
+				}
+
+				writer
+					.flush()
 					.map_err(|_| CacheError::Internal)?;
 			}
-
-			self.get_writer()?
-				.flush()
-				.map_err(|_| CacheError::Internal)?;
 
 			thread::sleep(POLL_DELAY);
 		}
@@ -81,61 +90,46 @@ where
 {
 	pub fn new(
 		listener: Receiver<StackEvent<K>>,
-		traces: Arc<RwLock<VecDeque<(Instant, File)>>>,
+		trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
 	) -> Self {
 		TraceWorker {
 			listener,
 
-			traces,
-			current_writer: None,
+			trace_fragments,
 
 			_v_marker: PhantomData,
 			_s_marker: PhantomData,
 		}
 	}
 
-	fn get_writer(&mut self) -> Result<&mut BinaryWriter<StackEvent<K>>, CacheError> {
-		self.refresh_traces()?;
-		self.current_writer.as_mut().ok_or(CacheError::Internal)
-	}
-
-	/// Ensure all traces are younger than TRACE_MAX_AGE and the current
-	/// writer points to the latest trace which is also younger than
-	/// TRACE_REFRESH_AGE
-	fn refresh_traces(&mut self) -> Result<(), CacheError> {
-		while self.traces
+	/// Ensures all trace fragments are younger than TRACE_MAX_AGE and the
+	/// youngest fragment is also younger than TRACE_REFRESH_AGE
+	fn refresh_fragments(&mut self) -> Result<(), CacheError> {
+		// remove any fragments that are expired
+		while self.trace_fragments
 			.read()
 			.back()
-			.is_some_and(|(created, _)| created.elapsed() > TRACE_MAX_AGE) {
+			.is_some_and(|fragment| fragment.is_expired()) {
 
-			// remove any trace path that is older than TRACE_MAX_AGE
-			self.traces.write().pop_front();
+			self.trace_fragments.write().pop_front();
 		}
 
-		if self.traces
+		if self.trace_fragments
 			.read()
 			.back()
-			.is_some_and(|(created, _)| created.elapsed() <= TRACE_REFRESH_AGE) {
+			.is_some_and(|fragment| fragment.is_valid()) {
 
 			// the latest trace is still valid
 			return Ok(());
 		}
 
-		// the latest trace is no longer valid, so create a new one
-		let file = tempfile().map_err(|_| CacheError::Internal)?;
-
-		// we need to keep a secondary instance of the file open to prevent it
-		// from being deleted
-		let file_clone = file.try_clone().map_err(|_| CacheError::Internal)?;
-
-		let writer = BinaryWriter::<StackEvent<K>>::from_file(file)
+		// the latest fragment is no longer valid, so create a new one
+		let fragment = TraceFragment::<K>::new()
 			.map_err(|_| CacheError::Internal)?;
 
-		self.traces
+		self.trace_fragments
 			.write()
-			.push_back((Instant::now(), file_clone));
-
-		self.current_writer = Some(writer);
+			.push_back(fragment);
 
 		Ok(())
 	}
