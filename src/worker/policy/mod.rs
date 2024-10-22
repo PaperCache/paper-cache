@@ -347,6 +347,7 @@ where
 		if self.mini_policy_index.is_some() {
 			// the mini policy is still running so stack events should be buffered
 			// until the full stack is reconstructed
+			return Ok(());
 		}
 
 		for event in buffered_events.iter() {
