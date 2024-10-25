@@ -108,7 +108,7 @@ where
 		// remove any fragments that are expired
 		while self.trace_fragments
 			.read()
-			.back()
+			.front()
 			.is_some_and(|fragment| fragment.is_expired()) {
 
 			self.trace_fragments.write().pop_front();
