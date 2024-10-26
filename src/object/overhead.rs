@@ -1,3 +1,8 @@
+use std::{
+	mem,
+	time::Instant,
+};
+
 use typesize::TypeSize;
 
 use crate::{
@@ -50,8 +55,8 @@ impl Default for OverheadManager {
 			})
 			.sum();
 
-		// 8 bytes for the key in the BTreeMap, 8 bytes for the entry in the HashSet
-		let ttl_overhead_per_object = 16;
+		// the size of an Instant plus 8 bytes for the key in the BTreeMap
+		let ttl_overhead_per_object = mem::size_of::<Instant>() as u32 + 8;
 
 		OverheadManager {
 			policies_overhead_per_object,
