@@ -1,11 +1,15 @@
 pub mod overhead;
 
-use std::sync::Arc;
+use std::{
+	mem,
+	sync::Arc,
+	time::{Instant, Duration},
+};
+
 use typesize::TypeSize;
-use kwik::time;
 
 pub type ObjectSize = u32;
-pub type ExpireTime = Option<u64>;
+pub type ExpireTime = Option<Instant>;
 
 pub struct Object<T>
 where
@@ -36,7 +40,7 @@ where
 	}
 
 	fn total_size(&self) -> ObjectSize {
-		(self.data.get_size() + self.expiry.get_size()) as ObjectSize
+		(self.data.get_size() + mem::size_of::<ExpireTime>()) as ObjectSize
 	}
 
 	pub fn expiry(&self) -> ExpireTime {
@@ -44,17 +48,17 @@ where
 	}
 
 	pub fn is_expired(&self) -> bool {
-		self.expiry.is_some_and(|expiry| expiry <= time::timestamp())
+		self.expiry.is_some_and(|expiry| expiry <= Instant::now())
 	}
 
 	pub fn expires(&mut self, ttl: Option<u32>) {
 		self.expiry = match ttl {
 			Some(0) | None => None,
-			Some(ttl) => Some(time::timestamp() + u64::from(ttl) * 1000),
+			Some(ttl) => Some(get_expiry_from_ttl(ttl)),
 		};
 	}
 }
 
-pub fn get_expiry_from_ttl(ttl: u32) -> u64 {
-	time::timestamp() + u64::from(ttl) * 1000
+pub fn get_expiry_from_ttl(ttl: u32) -> Instant {
+	Instant::now() + Duration::from_secs(ttl.into())
 }

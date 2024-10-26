@@ -24,7 +24,7 @@ pub type WorkerReceiver<K> = Receiver<WorkerEvent<K>>;
 #[derive(Clone)]
 pub enum WorkerEvent<K> {
 	Get(K, bool),
-	Set(K, ObjectSize, ExpireTime, Option<ObjectSize>),
+	Set(K, ObjectSize, ExpireTime, Option<(ObjectSize, ExpireTime)>),
 	Del(K, ObjectSize, ExpireTime),
 
 	Ttl(K, ExpireTime, ExpireTime),

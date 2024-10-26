@@ -3,15 +3,11 @@ mod expiries;
 use std::{
 	thread,
 	hash::{Hash, BuildHasher},
-	time::Duration,
+	time::{Instant, Duration},
 };
 
 use typesize::TypeSize;
-
-use kwik::{
-	time,
-	file::binary::{ReadChunk, WriteChunk},
-};
+use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
 	cache::{ObjectMapRef, StatsRef, OverheadManagerRef, erase},
@@ -36,7 +32,7 @@ where
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
-	expiries: Expiries<K, S>,
+	expiries: Expiries<K>,
 }
 
 impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
@@ -48,11 +44,18 @@ where
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
-			let now = time::timestamp();
+			let now = Instant::now();
 
 			for event in self.listener.try_iter() {
 				match event {
-					WorkerEvent::Set(key, _, expiry, _) => self.expiries.insert(key, expiry),
+					WorkerEvent::Set(key, _, expiry, old_info) => {
+						if let Some((_, old_expiry)) = old_info {
+							self.expiries.remove(key, old_expiry);
+						}
+
+						self.expiries.insert(key, expiry);
+					},
+
 					WorkerEvent::Del(key, _, expiry) => self.expiries.remove(key, expiry),
 
 					WorkerEvent::Ttl(key, old_expiry, new_expiry) => {
@@ -66,23 +69,21 @@ where
 				}
 			}
 
-			if let Some(expired) = self.expiries.expired(now) {
-				for key in expired {
-					erase(
-						&self.objects,
-						&self.stats,
-						&self.overhead_manager,
-						Some(key),
-					).ok();
-				}
+			while let Some(key) = self.expiries.pop_expired(now) {
+				erase(
+					&self.objects,
+					&self.stats,
+					&self.overhead_manager,
+					Some(key),
+				).ok();
 			}
 
-			let delay = match self.expiries.has_within(2) {
+			let delay_ms = match self.expiries.has_within(2) {
 				true => 1,
 				false => 1000,
 			};
 
-			thread::sleep(Duration::from_millis(delay));
+			thread::sleep(Duration::from_millis(delay_ms));
 		}
 	}
 }
@@ -93,12 +94,11 @@ where
 	V: 'static + Sync + TypeSize,
 	S: Clone + BuildHasher,
 {
-	pub fn with_hasher(
+	pub fn new(
 		listener: WorkerReceiver<K>,
 		objects: ObjectMapRef<K, V, S>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
-		hasher: S,
 	) -> Self {
 		TtlWorker {
 			listener,
@@ -107,7 +107,7 @@ where
 			stats,
 			overhead_manager,
 
-			expiries: Expiries::with_hasher(hasher),
+			expiries: Expiries::default(),
 		}
 	}
 }

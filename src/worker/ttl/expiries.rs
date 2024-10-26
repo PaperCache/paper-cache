@@ -1,31 +1,21 @@
 use std::{
-	hash::{Hash, BuildHasher},
-	collections::{BTreeMap, HashSet},
+	time::Instant,
+	collections::BTreeMap,
 };
 
 use crate::object::{ExpireTime, get_expiry_from_ttl};
 
-pub struct Expiries<K, S>
+pub struct Expiries<K>
 where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
+	K: Copy + Eq,
 {
-	map: BTreeMap<u64, HashSet<K, S>>,
-	hasher: S,
+	map: BTreeMap<Instant, K>,
 }
 
-impl<K, S> Expiries<K, S>
+impl<K> Expiries<K>
 where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
+	K: Copy + Eq,
 {
-	pub fn with_hasher(hasher: S) -> Self {
-		Expiries {
-			map: BTreeMap::default(),
-			hasher,
-		}
-	}
-
 	pub fn has_within(&self, ttl: u32) -> bool {
 		let Some((nearest_expiry, _)) = self.map.first_key_value() else {
 			return false;
@@ -39,14 +29,7 @@ where
 			return;
 		};
 
-		if let Some(keys) = self.map.get_mut(&expiry) {
-			keys.insert(key);
-		} else {
-			let mut keys = HashSet::with_hasher(self.hasher.clone());
-			keys.insert(key);
-
-			self.map.insert(expiry, keys);
-		}
+		self.map.insert(expiry, key);
 	}
 
 	pub fn remove(&mut self, key: K, expiry: ExpireTime) {
@@ -54,18 +37,14 @@ where
 			return;
 		};
 
-		match self.map.get_mut(&expiry) {
-			Some(keys) => {
-				keys.remove(&key);
-			},
-
-			None => {
-				self.map.remove(&expiry);
-			},
+		if self.map.get(&expiry).is_none_or(|got_key| *got_key != key) {
+			return;
 		}
+
+		self.map.remove(&expiry);
 	}
 
-	pub fn expired(&mut self, now: u64) -> Option<HashSet<K, S>> {
+	pub fn pop_expired(&mut self, now: Instant) -> Option<K> {
 		let first_expiry = self.map
 			.first_key_value()
 			.map(|(expiry, _)| expiry)?;
@@ -74,10 +53,21 @@ where
 			return None;
 		}
 
-		self.map.pop_first().map(|(_, keys)| keys)
+		self.map.pop_first().map(|(_, key)| key)
 	}
 
 	pub fn clear(&mut self) {
 		self.map.clear();
+	}
+}
+
+impl<K> Default for Expiries<K>
+where
+	K: Copy + Eq,
+{
+	fn default() -> Self {
+		Expiries {
+			map: BTreeMap::default(),
+		}
 	}
 }

@@ -226,17 +226,22 @@ where
 
 		self.stats.set();
 
-		let old_object_size = self.objects
+		let old_object_info = self.objects
 			.insert(key, object)
-			.map(|old_object| self.overhead_manager.total_size(key, &old_object));
+			.map(|old_object| {
+				let size = self.overhead_manager.total_size(key, &old_object);
+				let expiry = old_object.expiry();
+
+				(size, expiry)
+			});
 
 		self.stats.increase_used_size(size.into());
 
-		if let Some(old_object_size) = old_object_size {
+		if let Some((old_object_size, _)) = old_object_info {
 			self.stats.decrease_used_size(old_object_size.into());
 		}
 
-		self.broadcast(WorkerEvent::Set(key, size, expiry, old_object_size))?;
+		self.broadcast(WorkerEvent::Set(key, size, expiry, old_object_info))?;
 
 		Ok(())
 	}

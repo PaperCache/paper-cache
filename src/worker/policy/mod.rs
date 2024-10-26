@@ -108,8 +108,8 @@ where
 				match event {
 					WorkerEvent::Get(key, hit) if hit => self.handle_get(key),
 
-					WorkerEvent::Set(key, size, _, old_size) => {
-						self.handle_set(key, size, old_size);
+					WorkerEvent::Set(key, size, _, old_info) => {
+						self.handle_set(key, size, old_info.map(|(old_size, _)| old_size));
 						has_current_set = true;
 					},
 

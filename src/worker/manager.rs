@@ -82,12 +82,11 @@ where
 			hasher.clone(),
 		));
 
-		register_worker(TtlWorker::<K, V, S>::with_hasher(
+		register_worker(TtlWorker::<K, V, S>::new(
 			ttl_listener,
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
-			hasher,
 		));
 
 		let workers: Arc<Box<[WorkerSender<K>]>> = Arc::new(Box::new([
