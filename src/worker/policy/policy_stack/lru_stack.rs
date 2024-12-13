@@ -27,6 +27,10 @@ where
 		}
 	}
 
+	fn len(&self) -> usize {
+		self.map.len()
+	}
+
 	fn insert(&mut self, key: K) {
 		if self.map.contains_key(&key) {
 			return self.update(key);

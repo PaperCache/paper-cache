@@ -22,6 +22,8 @@ where
 {
 	fn with_hasher(hasher: S) -> Self;
 
+	fn len(&self) -> usize;
+
 	fn insert(&mut self, key: K);
 	fn update(&mut self, _: K) {}
 	fn remove(&mut self, key: K);
@@ -49,6 +51,15 @@ where
 {
 	fn with_hasher(_hasher: S) -> Self {
 		unreachable!();
+	}
+
+	fn len(&self) -> usize {
+		match self {
+			PolicyStackType::Lfu(stack) => stack.len(),
+			PolicyStackType::Fifo(stack) => stack.len(),
+			PolicyStackType::Lru(stack) => stack.len(),
+			PolicyStackType::Mru(stack) => stack.len(),
+		}
 	}
 
 	fn insert(&mut self, key: K) {

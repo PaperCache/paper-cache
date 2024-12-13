@@ -6,7 +6,7 @@ use std::{
 	thread,
 	sync::Arc,
 	hash::{Hash, BuildHasher},
-	time::Duration,
+	time::{Instant, Duration},
 	io::{Seek, SeekFrom},
 	collections::VecDeque,
 };
@@ -14,8 +14,10 @@ use std::{
 use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::{Sender, Receiver, unbounded};
+use log::info;
 
 use kwik::{
+	fmt,
 	time,
 	file::binary::{ReadChunk, WriteChunk},
 };
@@ -278,6 +280,12 @@ where
 			return;
 		}
 
+		info!(
+			"Switching policy {} to {}",
+			self.current_policy.read().label(),
+			policy.label(),
+		);
+
 		*self.current_policy.write() = policy;
 
 		let mini_policy_index = self.mini_policy_stacks
@@ -293,6 +301,9 @@ where
 		let hasher = self.hasher.clone();
 
 		thread::spawn(move || {
+			info!("Reconstructing {} stack", policy.label());
+			let now = Instant::now();
+
 			let reconstruction_result = reconstruct_policy_stack::<K, S>(
 				policy,
 				current_policy.clone(),
@@ -304,6 +315,13 @@ where
 				// check to make sure the configured policy was not modified
 				// before sending the reconstructed stack
 				if policy == *current_policy.read() {
+					info!(
+						"{} stack reconstructed with {} object(s) in {:?}",
+						policy.label(),
+						fmt::number(stack.len()),
+						now.elapsed(),
+					);
+
 					let _ = policy_reconstruct_tx.send(stack);
 				}
 			}

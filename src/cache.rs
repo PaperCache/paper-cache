@@ -10,7 +10,12 @@ use std::{
 use typesize::TypeSize;
 use dashmap::DashMap;
 use crossbeam_channel::unbounded;
-use kwik::file::binary::{ReadChunk, WriteChunk};
+use log::info;
+
+use kwik::{
+	fmt,
+	file::binary::{ReadChunk, WriteChunk},
+};
 
 use crate::{
 	stats::{AtomicStats, Stats},
@@ -390,6 +395,8 @@ where
 	/// cache.wipe();
 	/// ```
 	pub fn wipe(&self) -> Result<(), CacheError> {
+		info!("Wiping cache");
+
 		self.objects.clear();
 		self.stats.clear();
 
@@ -416,6 +423,18 @@ where
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
+
+		let current_max_size = self.stats.get_max_size();
+
+		if max_size == current_max_size {
+			return Ok(());
+		}
+
+		info!(
+			"Resizing cache from {} to {}",
+			fmt::memory(current_max_size, Some(2)),
+			fmt::memory(max_size, Some(2)),
+		);
 
 		self.stats.set_max_size(max_size);
 		self.broadcast(WorkerEvent::Resize(max_size))?;
