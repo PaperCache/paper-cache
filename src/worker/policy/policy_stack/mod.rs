@@ -3,9 +3,8 @@ mod lru_stack;
 mod mru_stack;
 mod fifo_stack;
 
-use std::hash::{Hash, BuildHasher};
-
 use crate::{
+	cache::HashedKey,
 	policy::PaperPolicy,
 	worker::policy::policy_stack::{
 		lfu_stack::LfuStack,
@@ -15,44 +14,29 @@ use crate::{
 	},
 };
 
-pub trait PolicyStack<K, S>
+pub trait PolicyStack
 where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
+	Self: Default,
 {
-	fn with_hasher(hasher: S) -> Self;
-
 	fn len(&self) -> usize;
 
-	fn insert(&mut self, key: K);
-	fn update(&mut self, _: K) {}
-	fn remove(&mut self, key: K);
+	fn insert(&mut self, key: HashedKey);
+	fn update(&mut self, _: HashedKey) {}
+	fn remove(&mut self, key: HashedKey);
 
 	fn clear(&mut self);
 
-	fn pop(&mut self) -> Option<K>;
+	fn pop(&mut self) -> Option<HashedKey>;
 }
 
-pub enum PolicyStackType<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	Lfu(Box<LfuStack<K, S>>),
-	Fifo(Box<FifoStack<K, S>>),
-	Lru(Box<LruStack<K, S>>),
-	Mru(Box<MruStack<K, S>>),
+pub enum PolicyStackType {
+	Lfu(Box<LfuStack>),
+	Fifo(Box<FifoStack>),
+	Lru(Box<LruStack>),
+	Mru(Box<MruStack>),
 }
 
-impl<K, S> PolicyStack<K, S> for PolicyStackType<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	fn with_hasher(_hasher: S) -> Self {
-		unreachable!();
-	}
-
+impl PolicyStack for PolicyStackType {
 	fn len(&self) -> usize {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.len(),
@@ -62,7 +46,7 @@ where
 		}
 	}
 
-	fn insert(&mut self, key: K) {
+	fn insert(&mut self, key: HashedKey) {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.insert(key),
 			PolicyStackType::Fifo(stack) => stack.insert(key),
@@ -71,7 +55,7 @@ where
 		}
 	}
 
-	fn update(&mut self, key: K) {
+	fn update(&mut self, key: HashedKey) {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.update(key),
 			PolicyStackType::Fifo(stack) => stack.update(key),
@@ -80,7 +64,7 @@ where
 		}
 	}
 
-	fn remove(&mut self, key: K) {
+	fn remove(&mut self, key: HashedKey) {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.remove(key),
 			PolicyStackType::Fifo(stack) => stack.remove(key),
@@ -98,7 +82,7 @@ where
 		}
 	}
 
-	fn pop(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<HashedKey> {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.pop(),
 			PolicyStackType::Fifo(stack) => stack.pop(),
@@ -108,18 +92,14 @@ where
 	}
 }
 
-impl<K, S> PolicyStackType<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
+impl PolicyStackType {
 	#[must_use]
-	pub fn init_with_hasher(policy: PaperPolicy, hasher: S) -> Self {
+	pub fn new(policy: PaperPolicy) -> Self {
 		match policy {
-			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::new(LfuStack::with_hasher(hasher))),
-			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::new(FifoStack::with_hasher(hasher))),
-			PaperPolicy::Lru => PolicyStackType::Lru(Box::new(LruStack::with_hasher(hasher))),
-			PaperPolicy::Mru => PolicyStackType::Mru(Box::new(MruStack::with_hasher(hasher))),
+			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
+			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
+			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),
+			PaperPolicy::Mru => PolicyStackType::Mru(Box::default()),
 		}
 	}
 
@@ -135,22 +115,20 @@ where
 	}
 }
 
-impl<K, S> PartialEq<PolicyStackType<K, S>> for PaperPolicy
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	fn eq(&self, policy_type: &PolicyStackType<K, S>) -> bool {
+impl Default for PolicyStackType {
+	fn default() -> Self {
+		unreachable!();
+	}
+}
+
+impl PartialEq<PolicyStackType> for PaperPolicy {
+	fn eq(&self, policy_type: &PolicyStackType) -> bool {
 		self.eq(&policy_type)
 	}
 }
 
-impl<K, S> PartialEq<&PolicyStackType<K, S>> for PaperPolicy
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	fn eq(&self, policy_type: &&PolicyStackType<K, S>) -> bool {
+impl PartialEq<&PolicyStackType> for PaperPolicy {
+	fn eq(&self, policy_type: &&PolicyStackType) -> bool {
 		matches!(
 			(self, policy_type),
 			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))

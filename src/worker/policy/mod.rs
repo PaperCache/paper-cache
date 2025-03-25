@@ -5,7 +5,6 @@ mod trace;
 use std::{
 	thread,
 	sync::Arc,
-	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
 	io::{Seek, SeekFrom},
 	collections::VecDeque,
@@ -19,17 +18,18 @@ use log::info;
 use kwik::{
 	fmt,
 	time,
-	file::binary::{ReadChunk, WriteChunk},
 };
 
 use crate::{
 	cache::{
 		CacheSize,
+		HashedKey,
 		ObjectMapRef,
 		StatsRef,
 		OverheadManagerRef,
-		POLICIES,
+		EraseKey,
 		erase,
+		POLICIES,
 	},
 	object::ObjectSize,
 	error::CacheError,
@@ -54,55 +54,46 @@ const MINI_SAMPLING_THRESHOLD: u64 = 16_777;
 // the polling value must be a power of 2
 const RECONSTRUCT_POLICY_POLLING: usize = 1_048_576;
 
-pub struct PolicyWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + Send + BuildHasher,
-{
-	listener: Receiver<WorkerEvent<K>>,
+pub struct PolicyWorker<K, V> {
+	listener: Receiver<WorkerEvent>,
 
-	objects: ObjectMapRef<K, V, S>,
+	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
 	max_cache_size: CacheSize,
 	used_cache_size: CacheSize,
-	policy_stack: Option<PolicyStackType<K, S>>,
+	policy_stack: Option<PolicyStackType>,
 
-	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
-	trace_worker: Sender<StackEvent<K>>,
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
+	trace_worker: Sender<StackEvent>,
 
-	mini_policy_stacks: Box<[PolicyStackType<K, S>]>,
+	mini_policy_stacks: Box<[PolicyStackType]>,
 	mini_policy_index: Option<usize>,
 	current_policy: Arc<RwLock<PaperPolicy>>,
 
 	last_set_time: Option<u64>,
-
-	mini_stack_hasher: S,
-	hasher: S,
 }
 
-impl<K, V, S> Worker<K, V, S> for PolicyWorker<K, V, S>
+impl<K, V> Worker for PolicyWorker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + Send + BuildHasher,
+	K: Eq + TypeSize,
+	V: TypeSize,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		let (
 			policy_reconstruct_tx,
 			policy_reconstruct_rx,
-		) = unbounded::<PolicyStackType<K, S>>();
+		) = unbounded::<PolicyStackType>();
 
 		let policy_reconstruct_tx = Arc::new(policy_reconstruct_tx);
-		let mut buffered_events = Vec::<StackEvent<K>>::new();
+		let mut buffered_events = Vec::<StackEvent>::new();
 
 		loop {
 			let events = self.listener
 				.try_iter()
-				.collect::<Vec<WorkerEvent<K>>>();
+				.collect::<Vec<WorkerEvent>>();
 
 			let mut has_current_set = false;
 
@@ -134,7 +125,7 @@ where
 					_ => {},
 				}
 
-				if let Some(stack_event) = StackEvent::<K>::maybe_from_worker_event(&event) {
+				if let Some(stack_event) = StackEvent::maybe_from_worker_event(&event) {
 					if self.policy_stack.is_some() {
 						self.trace_worker
 							.send(stack_event)
@@ -168,36 +159,31 @@ where
 	}
 }
 
-impl<K, V, S> PolicyWorker<K, V, S>
+impl<K, V> PolicyWorker<K, V>
 where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: 'static + Clone + Send + BuildHasher,
+	K: Eq + TypeSize,
+	V: TypeSize,
 {
-	pub fn with_hasher(
-		listener: WorkerReceiver<K>,
-		objects: ObjectMapRef<K, V, S>,
+	pub fn new(
+		listener: WorkerReceiver,
+		objects: ObjectMapRef<K, V>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
 		policy: PaperPolicy,
-		hasher: S,
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
 		let mini_policy_stacks = POLICIES
 			.iter()
-			.map(|policy| PolicyStackType::<K, S>::init_with_hasher(*policy, hasher.clone()))
+			.map(|policy| PolicyStackType::new(*policy))
 			.collect::<Box<[_]>>();
 
-		let policy_stack = PolicyStackType::<K, S>::init_with_hasher(
-			policy,
-			hasher.clone(),
-		);
+		let policy_stack = PolicyStackType::new(policy);
 
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
 
-		register_worker(TraceWorker::<K, V, S>::new(
+		register_worker(TraceWorker::new(
 			trace_listener,
 			trace_fragments.clone(),
 		));
@@ -223,13 +209,10 @@ where
 			current_policy: Arc::new(RwLock::new(policy)),
 
 			last_set_time: None,
-
-			mini_stack_hasher: hasher.clone(),
-			hasher,
 		}
 	}
 
-	fn handle_get(&mut self, key: K) {
+	fn handle_get(&mut self, key: HashedKey) {
 		if let Some(stack) = &mut self.policy_stack {
 			stack.update(key);
 		}
@@ -241,7 +224,12 @@ where
 		}
 	}
 
-	fn handle_set(&mut self, key: K, size: ObjectSize, old_size: Option<ObjectSize>) {
+	fn handle_set(
+		&mut self,
+		key: HashedKey,
+		size: ObjectSize,
+		old_size: Option<ObjectSize>,
+	) {
 		if let Some(stack) = &mut self.policy_stack {
 			stack.insert(key);
 		}
@@ -259,7 +247,7 @@ where
 		}
 	}
 
-	fn handle_del(&mut self, key: K) {
+	fn handle_del(&mut self, key: HashedKey) {
 		if let Some(stack) = &mut self.policy_stack {
 			stack.remove(key);
 		}
@@ -274,7 +262,7 @@ where
 	fn handle_policy(
 		&mut self,
 		policy: PaperPolicy,
-		policy_reconstruct_tx: Arc<Sender<PolicyStackType<K, S>>>,
+		policy_reconstruct_tx: Arc<Sender<PolicyStackType>>,
 	) {
 		if policy == *self.current_policy.read() {
 			return;
@@ -298,17 +286,15 @@ where
 
 		let current_policy = self.current_policy.clone();
 		let trace_fragments = self.trace_fragments.clone();
-		let hasher = self.hasher.clone();
 
 		thread::spawn(move || {
 			info!("Reconstructing {} stack", policy.label());
 			let now = Instant::now();
 
-			let reconstruction_result = reconstruct_policy_stack::<K, S>(
+			let reconstruction_result = reconstruct_policy_stack(
 				policy,
 				current_policy.clone(),
 				trace_fragments.clone(),
-				hasher,
 			);
 
 			if let Ok(stack) = reconstruction_result {
@@ -340,8 +326,8 @@ where
 
 	fn apply_buffered_events(
 		&mut self,
-		buffered_events: &[StackEvent<K>],
-		policy_reconstruct_rx: &Receiver<PolicyStackType<K, S>>,
+		buffered_events: &[StackEvent],
+		policy_reconstruct_rx: &Receiver<PolicyStackType>,
 	) {
 		for mut stack in policy_reconstruct_rx.try_iter() {
 			for event in buffered_events {
@@ -360,7 +346,7 @@ where
 
 	fn flush_buffered_events(
 		&self,
-		buffered_events: &mut Vec<StackEvent<K>>,
+		buffered_events: &mut Vec<StackEvent>,
 	) -> Result<(), CacheError> {
 		if self.mini_policy_index.is_some() {
 			// the mini policy is still running so stack events should be buffered
@@ -381,7 +367,7 @@ where
 
 	fn apply_evictions(
 		&mut self,
-		buffered_events: &mut Vec<StackEvent<K>>,
+		buffered_events: &mut Vec<StackEvent>,
 	) -> Result<(), CacheError> {
 		if let Some(index) = self.mini_policy_index {
 			self.apply_mini_evictions(index, buffered_events);
@@ -393,18 +379,20 @@ where
 			.ok_or(CacheError::Internal)?;
 
 		while self.used_cache_size > self.max_cache_size {
+			let maybe_key = stack.pop().map(|key| EraseKey::Hashed(key));
+
 			let erase_result = erase(
 				&self.objects,
 				&self.stats,
 				&self.overhead_manager,
-				stack.pop(),
+				maybe_key,
 			);
 
 			let Ok((key, object)) = erase_result else {
 				continue;
 			};
 
-			let size = self.overhead_manager.total_size(key, &object);
+			let size = self.overhead_manager.total_size(&object);
 			self.used_cache_size -= size as u64;
 
 			buffered_events.push(StackEvent::Del(key));
@@ -416,24 +404,26 @@ where
 	fn apply_mini_evictions(
 		&mut self,
 		mini_policy_index: usize,
-		buffered_events: &mut Vec<StackEvent<K>>,
+		buffered_events: &mut Vec<StackEvent>,
 	) {
 		let mini_policy_stack = &mut self.mini_policy_stacks[mini_policy_index];
-		let mut evictions = Vec::<K>::new();
+		let mut evictions = Vec::<HashedKey>::new();
 
 		while self.used_cache_size > self.max_cache_size {
+			let maybe_key = mini_policy_stack.pop().map(|key| EraseKey::Hashed(key));
+
 			let erase_result = erase(
 				&self.objects,
 				&self.stats,
 				&self.overhead_manager,
-				mini_policy_stack.pop(),
+				maybe_key,
 			);
 
 			let Ok((key, object)) = erase_result else {
 				continue;
 			};
 
-			let size = self.overhead_manager.total_size(key, &object);
+			let size = self.overhead_manager.total_size(&object);
 			self.used_cache_size -= size as u64;
 
 			evictions.push(key);
@@ -449,25 +439,18 @@ where
 		}
 	}
 
-	fn should_mini_sample(&self, key: K) -> bool {
-		let hashed = self.mini_stack_hasher.hash_one(key);
-
+	fn should_mini_sample(&self, hashed_key: HashedKey) -> bool {
 		// this optimization only works if the sampling modulus is a power of 2
-		hashed & (MINI_SAMPLING_MODULUS - 1) < MINI_SAMPLING_THRESHOLD
+		hashed_key & (MINI_SAMPLING_MODULUS - 1) < MINI_SAMPLING_THRESHOLD
 	}
 }
 
-fn reconstruct_policy_stack<K, S>(
+fn reconstruct_policy_stack(
 	policy: PaperPolicy,
 	current_policy: Arc<RwLock<PaperPolicy>>,
-	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
-	hasher: S,
-) -> Result<PolicyStackType<K, S>, CacheError>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	S: Clone + Send + BuildHasher,
-{
-	let mut stack = PolicyStackType::<K, S>::init_with_hasher(policy, hasher);
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
+) -> Result<PolicyStackType, CacheError> {
+	let mut stack = PolicyStackType::new(policy);
 
 	for fragment in trace_fragments.read().iter() {
 		let mut fragment_modifiers = fragment.lock();
@@ -514,9 +497,8 @@ where
 	Ok(stack)
 }
 
-unsafe impl<K, V, S> Send for PolicyWorker<K, V, S>
+unsafe impl<K, V> Send for PolicyWorker<K, V>
 where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + Send + BuildHasher,
+	K: TypeSize,
+	V: TypeSize,
 {}

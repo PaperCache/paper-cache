@@ -1,47 +1,33 @@
-use std::{
-	hash::{Hash, BuildHasher},
-	collections::HashMap,
+use std::collections::HashMap;
+use dlv_list::{VecList, Index};
+
+use crate::{
+	cache::{HashedKey, NoHasher},
+	worker::policy::policy_stack::PolicyStack,
 };
 
-use dlv_list::{VecList, Index};
-use crate::worker::policy::policy_stack::PolicyStack;
-
-pub struct LfuStack<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	index_map: HashMap<K, KeyIndex<K>, S>,
-	count_lists: VecList<CountList<K>>,
+#[derive(Default)]
+pub struct LfuStack {
+	index_map: HashMap<HashedKey, KeyIndex, NoHasher>,
+	count_lists: VecList<CountList>,
 }
 
-struct CountList<K> {
+struct CountList {
 	count: u32,
-	list: VecList<K>,
+	list: VecList<HashedKey>,
 }
 
-struct KeyIndex<K> {
-	count_list_index: Index<CountList<K>>,
-	list_index: Index<K>,
+struct KeyIndex {
+	count_list_index: Index<CountList>,
+	list_index: Index<HashedKey>,
 }
 
-impl<K, S> PolicyStack<K, S> for LfuStack<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	fn with_hasher(hasher: S) -> Self {
-		LfuStack {
-			index_map: HashMap::with_hasher(hasher),
-			count_lists: VecList::default(),
-		}
-	}
-
+impl PolicyStack for LfuStack {
 	fn len(&self) -> usize {
 		self.index_map.len()
 	}
 
-	fn insert(&mut self, key: K) {
+	fn insert(&mut self, key: HashedKey) {
 		if self.index_map.contains_key(&key) {
 			return self.update(key);
 		}
@@ -61,7 +47,7 @@ where
 		));
 	}
 
-	fn update(&mut self, key: K) {
+	fn update(&mut self, key: HashedKey) {
 		let Some(key_index) = self.index_map.get(&key) else {
 			return;
 		};
@@ -92,7 +78,7 @@ where
 			}
 		}
 
-		let mut count_list = CountList::<K>::new(prev_count + 1);
+		let mut count_list = CountList::new(prev_count + 1);
 
 		let list_index = count_list.push(key);
 		let count_list_index = self.count_lists.insert_after(prev_count_list_index, count_list);
@@ -107,7 +93,7 @@ where
 		}
 	}
 
-	fn remove(&mut self, key: K) {
+	fn remove(&mut self, key: HashedKey) {
 		let Some(key_index) = self.index_map.remove(&key) else {
 			return;
 		};
@@ -125,7 +111,7 @@ where
 		self.count_lists.clear();
 	}
 
-	fn pop(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<HashedKey> {
 		let count_list_index = self.count_lists.front_index()?;
 		let count_list = self.count_lists.get_mut(count_list_index)?;
 
@@ -140,7 +126,7 @@ where
 	}
 }
 
-impl<K> CountList<K> {
+impl CountList {
 	fn new(count: u32) -> Self {
 		CountList {
 			count,
@@ -152,23 +138,23 @@ impl<K> CountList<K> {
 		self.list.is_empty()
 	}
 
-	fn push(&mut self, key: K) -> Index<K> {
+	fn push(&mut self, key: HashedKey) -> Index<HashedKey> {
 		self.list.push_front(key)
 	}
 
-	fn pop(&mut self) -> K {
+	fn pop(&mut self) -> HashedKey {
 		self.list.pop_back().unwrap()
 	}
 
-	fn remove(&mut self, index: Index<K>) {
+	fn remove(&mut self, index: Index<HashedKey>) {
 		self.list.remove(index).unwrap();
 	}
 }
 
-impl<K> KeyIndex<K> {
+impl KeyIndex {
 	fn new(
-		count_list_index: Index<CountList<K>>,
-		list_index: Index<K>,
+		count_list_index: Index<CountList>,
+		list_index: Index<HashedKey>,
 	) -> Self {
 		KeyIndex {
 			count_list_index,
@@ -181,13 +167,15 @@ impl<K> KeyIndex<K> {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use std::hash::RandomState;
-		use crate::worker::policy::policy_stack::{PolicyStack, LfuStack};
+		use crate::{
+			cache::HashedKey,
+			worker::policy::policy_stack::{PolicyStack, LfuStack},
+		};
 
-		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<u32> = vec![0, 1, 2, 3];
+		let accesses: Vec<HashedKey> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
+		let mut evictions: Vec<HashedKey> = vec![0, 1, 2, 3];
 
-		let mut stack = LfuStack::<u32, RandomState>::with_hasher(RandomState::default());
+		let mut stack = LfuStack::default();
 
 		for access in accesses {
 			stack.insert(access);

@@ -2,32 +2,26 @@ mod manager;
 mod policy;
 mod ttl;
 
-use std::{
-	thread,
-	hash::{Hash, BuildHasher},
-};
-
-use typesize::TypeSize;
+use std::thread;
 use crossbeam_channel::{Sender, Receiver};
-use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
-	cache::CacheSize,
+	cache::{CacheSize, HashedKey},
 	error::CacheError,
 	object::{ObjectSize, ExpireTime},
 	policy::PaperPolicy,
 };
 
-pub type WorkerSender<K> = Sender<WorkerEvent<K>>;
-pub type WorkerReceiver<K> = Receiver<WorkerEvent<K>>;
+pub type WorkerSender = Sender<WorkerEvent>;
+pub type WorkerReceiver = Receiver<WorkerEvent>;
 
 #[derive(Clone)]
-pub enum WorkerEvent<K> {
-	Get(K, bool),
-	Set(K, ObjectSize, ExpireTime, Option<(ObjectSize, ExpireTime)>),
-	Del(K, ObjectSize, ExpireTime),
+pub enum WorkerEvent {
+	Get(HashedKey, bool),
+	Set(HashedKey, ObjectSize, ExpireTime, Option<(ObjectSize, ExpireTime)>),
+	Del(HashedKey, ObjectSize, ExpireTime),
 
-	Ttl(K, ExpireTime, ExpireTime),
+	Ttl(HashedKey, ExpireTime, ExpireTime),
 
 	Wipe,
 
@@ -35,22 +29,14 @@ pub enum WorkerEvent<K> {
 	Policy(PaperPolicy),
 }
 
-pub trait Worker<K, V, S>
+pub trait Worker
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
 {
 	fn run(&mut self) -> Result<(), CacheError>;
 }
 
-pub fn register_worker<K, V, S>(mut worker: impl Worker<K, V, S>)
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
+pub fn register_worker(mut worker: impl Worker) {
 	thread::spawn(move || worker.run());
 }
 

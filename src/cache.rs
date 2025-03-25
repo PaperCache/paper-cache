@@ -1,21 +1,27 @@
 use std::{
+	thread,
 	sync::{
 		Arc,
 		atomic::AtomicU64,
 	},
-	hash::{Hash, BuildHasher, RandomState},
-	thread,
+	hash::{
+		Hash,
+		RandomState,
+		BuildHasher,
+		BuildHasherDefault,
+	},
+};
+
+use dashmap::{
+	DashMap,
+	mapref::entry::Entry,
 };
 
 use typesize::TypeSize;
-use dashmap::DashMap;
+use nohash_hasher::NoHashHasher;
 use crossbeam_channel::unbounded;
 use log::info;
-
-use kwik::{
-	fmt,
-	file::binary::{ReadChunk, WriteChunk},
-};
+use kwik::fmt;
 
 use crate::{
 	stats::{AtomicStats, Stats},
@@ -37,7 +43,10 @@ use crate::{
 pub type CacheSize = u64;
 pub type AtomicCacheSize = AtomicU64;
 
-pub type ObjectMapRef<K, V, S> = Arc<DashMap<K, Object<V>, S>>;
+pub type HashedKey = u64;
+pub type NoHasher = BuildHasherDefault<NoHashHasher<HashedKey>>;
+
+pub type ObjectMapRef<K, V> = Arc<DashMap<HashedKey, Object<K, V>, NoHasher>>;
 pub type StatsRef = Arc<AtomicStats>;
 pub type OverheadManagerRef = Arc<OverheadManager>;
 
@@ -48,24 +57,21 @@ pub const POLICIES: &[PaperPolicy] = &[
 	PaperPolicy::Mru,
 ];
 
-pub struct PaperCache<K, V, S = RandomState>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + Send + BuildHasher,
-{
-	objects: ObjectMapRef<K, V, S>,
+pub struct PaperCache<K, V, S = RandomState> {
+	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 
-	worker_manager: Arc<WorkerSender<K>>,
+	worker_manager: Arc<WorkerSender>,
 	overhead_manager: OverheadManagerRef,
+
+	hasher: S,
 }
 
 impl<K, V, S> PaperCache<K, V, S>
 where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: 'static + Default + Clone + Send + BuildHasher,
+	K: 'static + Eq + Hash + TypeSize,
+	V: 'static + TypeSize,
+	S: Default + Clone + BuildHasher,
 {
 	/// Creates an empty `PaperCache` with maximum size `max_size` and
 	/// eviction policy `policy`. If the maximum size is zero, a
@@ -102,25 +108,25 @@ where
 		max_size: CacheSize,
 		policy: PaperPolicy,
 		hasher: S,
-	) -> Result<Self, CacheError> {
+	) -> Result<Self, CacheError>
+	{
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		let objects = Arc::new(DashMap::with_hasher(hasher.clone()));
+		let objects = Arc::new(DashMap::with_hasher(NoHasher::default()));
 		let stats = Arc::new(AtomicStats::new(max_size, policy)?);
 
 		let overhead_manager = Arc::new(OverheadManager::default());
 
 		let (worker_sender, worker_listener) = unbounded();
 
-		let mut worker_manager = WorkerManager::with_hasher(
+		let mut worker_manager = WorkerManager::new(
 			worker_listener,
 			&objects,
 			&stats,
 			&overhead_manager,
 			policy,
-			hasher,
 		);
 
 		thread::spawn(move || worker_manager.run());
@@ -131,6 +137,8 @@ where
 
 			worker_manager: Arc::new(worker_sender),
 			overhead_manager,
+
+			hasher,
 		};
 
 		Ok(cache)
@@ -183,9 +191,11 @@ where
 	/// // Getting a key which does not exist in the cache will return a CacheError.
 	/// assert!(cache.get(1).is_err());
 	/// ```
-	pub fn get(&self, key: K) -> Result<Arc<V>, CacheError> {
-		let result = match self.objects.get(&key) {
-			Some(object) if !object.is_expired() => {
+	pub fn get(&self, key: &K) -> Result<Arc<V>, CacheError> {
+		let hashed_key = self.hash_key(key);
+
+		let result = match self.objects.get(&hashed_key) {
+			Some(object) if object.key_matches(key) && !object.is_expired() => {
 				self.stats.hit();
 				Ok(object.data())
 			},
@@ -196,7 +206,7 @@ where
 			},
 		};
 
-		self.broadcast(WorkerEvent::Get(key, result.is_ok()))?;
+		self.broadcast(WorkerEvent::Get(hashed_key, result.is_ok()))?;
 
 		result
 	}
@@ -217,8 +227,10 @@ where
 	/// assert!(cache.set(0, 0, None).is_ok());
 	/// ```
 	pub fn set(&self, key: K, value: V, ttl: Option<u32>) -> Result<(), CacheError> {
-		let object = Object::new(value, ttl);
-		let size = self.overhead_manager.total_size(key, &object);
+		let hashed_key = self.hash_key(&key);
+
+		let object = Object::new(key, value, ttl);
+		let size = self.overhead_manager.total_size(&object);
 		let expiry = object.expiry();
 
 		if size == 0 {
@@ -232,9 +244,9 @@ where
 		self.stats.set();
 
 		let old_object_info = self.objects
-			.insert(key, object)
+			.insert(hashed_key, object)
 			.map(|old_object| {
-				let size = self.overhead_manager.total_size(key, &old_object);
+				let size = self.overhead_manager.total_size(&old_object);
 				let expiry = old_object.expiry();
 
 				(size, expiry)
@@ -246,7 +258,7 @@ where
 			self.stats.decrease_used_size(old_object_size.into());
 		}
 
-		self.broadcast(WorkerEvent::Set(key, size, expiry, old_object_info))?;
+		self.broadcast(WorkerEvent::Set(hashed_key, size, expiry, old_object_info))?;
 
 		Ok(())
 	}
@@ -266,19 +278,21 @@ where
 	/// // Deleting a key which does not exist in the cache will return a CacheError.
 	/// assert!(cache.del(1).is_err());
 	/// ```
-	pub fn del(&self, key: K) -> Result<(), CacheError> {
-		let (key, object) = erase(
+	pub fn del(&self, key: &K) -> Result<(), CacheError> {
+		let hashed_key = self.hash_key(key);
+
+		let (removed_hashed_key, object) = erase(
 			&self.objects,
 			&self.stats,
 			&self.overhead_manager,
-			Some(key),
+			Some(EraseKey::Original(key, hashed_key)),
 		)?;
 
 		self.stats.del();
 
 		self.broadcast(WorkerEvent::Del(
-			key,
-			self.overhead_manager.total_size(key, &object),
+			removed_hashed_key,
+			self.overhead_manager.total_size(&object),
 			object.expiry(),
 		))?;
 
@@ -299,8 +313,12 @@ where
 	/// assert!(cache.has(0));
 	/// assert!(!cache.has(1));
 	/// ```
-	pub fn has(&self, key: K) -> bool {
-		self.objects.get(&key).is_some_and(|object| !object.is_expired())
+	pub fn has(&self, key: &K) -> bool {
+		let hashed_key = self.hash_key(key);
+
+		self.objects
+			.get(&hashed_key)
+			.is_some_and(|object| object.key_matches(key) && !object.is_expired())
 	}
 
 	/// Gets (peeks) the value associated with the supplied key without altering
@@ -327,9 +345,13 @@ where
 	/// assert!(cache.peek(1).is_ok());
 	/// assert!(cache.peek(2).is_ok());
 	/// ```
-	pub fn peek(&self, key: K) -> Result<Arc<V>, CacheError> {
-		match self.objects.get(&key) {
-			Some(object) if !object.is_expired() => Ok(object.data()),
+	pub fn peek(&self, key: &K) -> Result<Arc<V>, CacheError> {
+		let hashed_key = self.hash_key(key);
+
+		match self.objects.get(&hashed_key) {
+			Some(object) if object.key_matches(key) && !object.is_expired() =>
+				Ok(object.data()),
+
 			_ => Err(CacheError::KeyNotFound),
 		}
 	}
@@ -346,9 +368,11 @@ where
 	/// cache.set(0, 0, None); // value will not expire
 	/// cache.ttl(0, Some(5)); // value will expire in 5 seconds
 	/// ```
-	pub fn ttl(&self, key: K, ttl: Option<u32>) -> Result<(), CacheError> {
-		let mut object = match self.objects.get_mut(&key) {
-			Some(object) if !object.is_expired() => object,
+	pub fn ttl(&self, key: &K, ttl: Option<u32>) -> Result<(), CacheError> {
+		let hashed_key = self.hash_key(key);
+
+		let mut object = match self.objects.get_mut(&hashed_key) {
+			Some(object) if object.key_matches(key) && !object.is_expired() => object,
 			_ => return Err(CacheError::KeyNotFound),
 		};
 
@@ -356,7 +380,7 @@ where
 		object.expires(ttl);
 		let new_expiry = object.expiry();
 
-		self.broadcast(WorkerEvent::Ttl(key, old_expiry, new_expiry))?;
+		self.broadcast(WorkerEvent::Ttl(hashed_key, old_expiry, new_expiry))?;
 
 		Ok(())
 	}
@@ -377,9 +401,13 @@ where
 	/// // Sizing a key which does not exist in the cache will return a CacheError.
 	/// assert!(cache.size(1).is_err());
 	/// ```
-	pub fn size(&self, key: K) -> Result<ObjectSize, CacheError> {
-		match self.objects.get(&key) {
-			Some(object) if !object.is_expired() => Ok(self.overhead_manager.total_size(key, &object)),
+	pub fn size(&self, key: &K) -> Result<ObjectSize, CacheError> {
+		let hashed_key = self.hash_key(key);
+
+		match self.objects.get(&hashed_key) {
+			Some(object) if object.key_matches(key) && !object.is_expired() =>
+				Ok(self.overhead_manager.total_size(&object)),
+
 			_ => Err(CacheError::KeyNotFound),
 		}
 	}
@@ -459,28 +487,37 @@ where
 		Ok(())
 	}
 
-	fn broadcast(&self, event: WorkerEvent<K>) -> Result<(), CacheError> {
+	fn broadcast(&self, event: WorkerEvent) -> Result<(), CacheError> {
 		self.worker_manager
 			.try_send(event)
 			.map_err(|_| CacheError::Internal)?;
 
 		Ok(())
 	}
+
+	fn hash_key(&self, key: &K) -> HashedKey {
+		self.hasher.hash_one(key)
+	}
 }
 
-pub fn erase<K, V, S>(
-	objects: &ObjectMapRef<K, V, S>,
+pub enum EraseKey<'a, K> {
+	Original(&'a K, HashedKey),
+	Hashed(HashedKey),
+}
+
+pub fn erase<K, V>(
+	objects: &ObjectMapRef<K, V>,
 	stats: &StatsRef,
 	overhead_manager: &OverheadManagerRef,
-	maybe_key: Option<K>,
-) -> Result<(K, Object<V>), CacheError>
+	maybe_key: Option<EraseKey<K>>,
+) -> Result<(HashedKey, Object<K, V>), CacheError>
 where
-	K: 'static + Copy + Eq + Hash + TypeSize,
-	V: 'static + TypeSize,
-	S: Clone + BuildHasher,
+	K: Eq + TypeSize,
+	V: TypeSize,
 {
-	let key = match maybe_key {
-		Some(key) => key,
+	let hashed_key = match maybe_key {
+		Some(EraseKey::Original(_, hashed_key)) => hashed_key,
+		Some(EraseKey::Hashed(hashed_key)) => hashed_key,
 
 		None => {
 			// the policy has run out of keys to evict (either it's a mini stack or
@@ -495,21 +532,27 @@ where
 		},
 	};
 
-	let (_, object) = objects
-		.remove(&key)
-		.ok_or(CacheError::KeyNotFound)?;
+	// don't remove the object right away because if we have the original key,
+	// we need to do a validation check that it matches the object's key in
+	// case of a hash collision
+	let Entry::Occupied(entry) = objects.entry(hashed_key) else {
+		return Err(CacheError::KeyNotFound);
+	};
 
-	stats.decrease_used_size(overhead_manager.total_size(key, &object).into());
+	if let Some(EraseKey::Original(key, _)) = maybe_key {
+		if !entry.get().key_matches(key) {
+			return Err(CacheError::KeyNotFound);
+		}
+	};
+
+	let object = entry.remove();
+
+	stats.decrease_used_size(overhead_manager.total_size(&object).into());
 
 	match !object.is_expired() {
-		true => Ok((key, object)),
+		true => Ok((hashed_key, object)),
 		false => Err(CacheError::KeyNotFound),
 	}
 }
 
-unsafe impl<K, V, S> Send for PaperCache<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + Send + BuildHasher,
-{}
+unsafe impl<K, V, S> Send for PaperCache<K, V, S> {}

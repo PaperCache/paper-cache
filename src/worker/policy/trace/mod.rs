@@ -3,20 +3,14 @@ mod fragment;
 use std::{
 	thread,
 	sync::Arc,
-	hash::{Hash, BuildHasher},
 	time::Duration,
 	collections::VecDeque,
-	marker::PhantomData,
 };
 
-use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
 
-use kwik::file::{
-	FileWriter,
-	binary::{ReadChunk, WriteChunk},
-};
+use kwik::file::FileWriter;
 
 use crate::{
 	error::CacheError,
@@ -30,27 +24,12 @@ pub use crate::worker::policy::trace::fragment::TraceFragment;
 
 const POLL_DELAY: Duration = Duration::from_secs(1);
 
-pub struct TraceWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
-	listener: Receiver<StackEvent<K>>,
-
-	trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
-
-	_v_marker: PhantomData<V>,
-	_s_marker: PhantomData<S>,
+pub struct TraceWorker {
+	listener: Receiver<StackEvent>,
+	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 }
 
-impl<K, V, S> Worker<K, V, S> for TraceWorker<K, V, S>
-where
-	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
+impl Worker for TraceWorker {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
 			let events = self.listener
@@ -82,23 +61,14 @@ where
 	}
 }
 
-impl<K, V, S> TraceWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
+impl TraceWorker {
 	pub fn new(
-		listener: Receiver<StackEvent<K>>,
-		trace_fragments: Arc<RwLock<VecDeque<TraceFragment<K>>>>,
+		listener: Receiver<StackEvent>,
+		trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 	) -> Self {
 		TraceWorker {
 			listener,
-
 			trace_fragments,
-
-			_v_marker: PhantomData,
-			_s_marker: PhantomData,
 		}
 	}
 
@@ -124,7 +94,7 @@ where
 		}
 
 		// the latest fragment is no longer valid, so create a new one
-		let fragment = TraceFragment::<K>::new()
+		let fragment = TraceFragment::new()
 			.map_err(|_| CacheError::Internal)?;
 
 		self.trace_fragments
@@ -135,9 +105,4 @@ where
 	}
 }
 
-unsafe impl<K, V, S> Send for TraceWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{}
+unsafe impl Send for TraceWorker {}

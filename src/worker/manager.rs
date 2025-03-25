@@ -1,12 +1,6 @@
-use std::{
-	sync::Arc,
-	hash::{Hash, BuildHasher},
-	marker::PhantomData,
-};
-
+use std::sync::Arc;
 use typesize::TypeSize;
 use crossbeam_channel::unbounded;
-use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
 	cache::{ObjectMapRef, StatsRef, OverheadManagerRef},
@@ -22,26 +16,12 @@ use crate::{
 	},
 };
 
-pub struct WorkerManager<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + Send + BuildHasher,
-{
-	listener: WorkerReceiver<K>,
-	workers: Arc<Box<[WorkerSender<K>]>>,
-
-	_v_marker: PhantomData<V>,
-	_s_marker: PhantomData<S>,
+pub struct WorkerManager {
+	listener: WorkerReceiver,
+	workers: Arc<Box<[WorkerSender]>>,
 }
 
-impl<K, V, S> Worker<K, V, S> for WorkerManager<K, V, S>
-where
-	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + Send + BuildHasher,
-{
+impl Worker for WorkerManager {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
 			let Ok(event) = self.listener.recv() else {
@@ -56,40 +36,37 @@ where
 	}
 }
 
-impl<K, V, S> WorkerManager<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: 'static + Default + Clone + Send + BuildHasher,
-{
-	pub fn with_hasher(
-		listener: WorkerReceiver<K>,
-		objects: &ObjectMapRef<K, V, S>,
+impl WorkerManager {
+	pub fn new<K, V>(
+		listener: WorkerReceiver,
+		objects: &ObjectMapRef<K, V>,
 		stats: &StatsRef,
 		overhead_manager: &OverheadManagerRef,
 		policy: PaperPolicy,
-		hasher: S,
-	) -> Self {
+	) -> Self
+	where
+		K: 'static + Eq + TypeSize,
+		V: 'static + TypeSize,
+	{
 		let (policy_worker, policy_listener) = unbounded();
 		let (ttl_worker, ttl_listener) = unbounded();
 
-		register_worker(PolicyWorker::<K, V, S>::with_hasher(
+		register_worker(PolicyWorker::<K, V>::new(
 			policy_listener,
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
 			policy,
-			hasher.clone(),
 		));
 
-		register_worker(TtlWorker::<K, V, S>::new(
+		register_worker(TtlWorker::<K, V>::new(
 			ttl_listener,
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
 		));
 
-		let workers: Arc<Box<[WorkerSender<K>]>> = Arc::new(Box::new([
+		let workers: Arc<Box<[WorkerSender]>> = Arc::new(Box::new([
 			policy_worker,
 			ttl_worker,
 		]));
@@ -97,16 +74,8 @@ where
 		WorkerManager {
 			listener,
 			workers,
-
-			_v_marker: PhantomData,
-			_s_marker: PhantomData,
 		}
 	}
 }
 
-unsafe impl<K, V, S> Send for WorkerManager<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + Send + BuildHasher,
-{}
+unsafe impl Send for WorkerManager {}

@@ -1,45 +1,37 @@
 use std::{
 	io,
-	hash::Hash,
 	time::{Instant, Duration},
 };
 
-use typesize::TypeSize;
 use parking_lot::{Mutex, MutexGuard};
 use tempfile::tempfile;
 
 use kwik::file::{
 	FileReader,
 	FileWriter,
-	binary::{BinaryReader, BinaryWriter, ReadChunk, WriteChunk},
+	binary::{BinaryReader, BinaryWriter},
 };
 
 use crate::worker::policy::event::StackEvent;
 
-type Modifiers<K> = (BinaryReader<StackEvent<K>>, BinaryWriter<StackEvent<K>>);
+type Modifiers = (BinaryReader<StackEvent>, BinaryWriter<StackEvent>);
 
 // REFRESH_AGE must be less than MAX_AGE
 const MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const REFRESH_AGE: Duration = Duration::from_secs(60 * 60);
 
-pub struct TraceFragment<K>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-{
+pub struct TraceFragment {
 	created: Instant,
-	modifiers: Mutex<Modifiers<K>>,
+	modifiers: Mutex<Modifiers>,
 }
 
-impl<K> TraceFragment<K>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-{
+impl TraceFragment {
 	pub fn new() -> io::Result<Self> {
 		let reader_file = tempfile()?;
 		let writer_file = reader_file.try_clone()?;
 
-		let reader = BinaryReader::<StackEvent<K>>::from_file(reader_file)?;
-		let writer = BinaryWriter::<StackEvent<K>>::from_file(writer_file)?;
+		let reader = BinaryReader::<StackEvent>::from_file(reader_file)?;
+		let writer = BinaryWriter::<StackEvent>::from_file(writer_file)?;
 
 		let fragment = TraceFragment {
 			created: Instant::now(),
@@ -57,7 +49,7 @@ where
 		self.created.elapsed() <= REFRESH_AGE
 	}
 
-	pub fn lock(&self) -> MutexGuard<Modifiers<K>> {
+	pub fn lock(&self) -> MutexGuard<Modifiers> {
 		self.modifiers.lock()
 	}
 }

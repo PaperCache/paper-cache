@@ -3,19 +3,17 @@ use std::{
 	collections::BTreeMap,
 };
 
-use crate::object::{ExpireTime, get_expiry_from_ttl};
+use crate::{
+	cache::HashedKey,
+	object::{ExpireTime, get_expiry_from_ttl},
+};
 
-pub struct Expiries<K>
-where
-	K: Copy + Eq,
-{
-	map: BTreeMap<Instant, K>,
+#[derive(Default)]
+pub struct Expiries {
+	map: BTreeMap<Instant, HashedKey>,
 }
 
-impl<K> Expiries<K>
-where
-	K: Copy + Eq,
-{
+impl Expiries {
 	pub fn has_within(&self, ttl: u32) -> bool {
 		let Some((nearest_expiry, _)) = self.map.first_key_value() else {
 			return false;
@@ -24,7 +22,7 @@ where
 		*nearest_expiry <= get_expiry_from_ttl(ttl)
 	}
 
-	pub fn insert(&mut self, key: K, expiry: ExpireTime) {
+	pub fn insert(&mut self, key: HashedKey, expiry: ExpireTime) {
 		let Some(expiry) = expiry else {
 			return;
 		};
@@ -32,7 +30,7 @@ where
 		self.map.insert(expiry, key);
 	}
 
-	pub fn remove(&mut self, key: K, expiry: ExpireTime) {
+	pub fn remove(&mut self, key: HashedKey, expiry: ExpireTime) {
 		let Some(expiry) = expiry else {
 			return;
 		};
@@ -44,7 +42,7 @@ where
 		self.map.remove(&expiry);
 	}
 
-	pub fn pop_expired(&mut self, now: Instant) -> Option<K> {
+	pub fn pop_expired(&mut self, now: Instant) -> Option<HashedKey> {
 		let first_expiry = self.map
 			.first_key_value()
 			.map(|(expiry, _)| expiry)?;
@@ -58,16 +56,5 @@ where
 
 	pub fn clear(&mut self) {
 		self.map.clear();
-	}
-}
-
-impl<K> Default for Expiries<K>
-where
-	K: Copy + Eq,
-{
-	fn default() -> Self {
-		Expiries {
-			map: BTreeMap::default(),
-		}
 	}
 }

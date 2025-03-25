@@ -1,29 +1,23 @@
-use std::{
-	io,
-	hash::Hash,
+use std::io;
+use kwik::file::binary::{SizedChunk, ReadChunk, WriteChunk};
+
+use crate::{
+	cache::HashedKey,
+	worker::WorkerEvent,
 };
 
-use kwik::file::binary::{SizedChunk, ReadChunk, WriteChunk};
-use crate::worker::WorkerEvent;
-
 #[derive(Clone)]
-pub enum StackEvent<K>
-where
-	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
-{
-	Get(K),
-	Set(K),
-	Del(K),
+pub enum StackEvent {
+	Get(HashedKey),
+	Set(HashedKey),
+	Del(HashedKey),
 	Wipe,
 }
 
 struct EventByte;
 
-impl<K> StackEvent<K>
-where
-	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
-{
-	pub fn maybe_from_worker_event(worker_event: &WorkerEvent<K>) -> Option<Self> {
+impl StackEvent {
+	pub fn maybe_from_worker_event(worker_event: &WorkerEvent) -> Option<Self> {
 		let event = match worker_event {
 			WorkerEvent::Get(key, hit) if *hit => StackEvent::Get(*key),
 			WorkerEvent::Set(key, _, _, _) => StackEvent::Set(*key),
@@ -37,33 +31,27 @@ where
 	}
 }
 
-impl<K> SizedChunk for StackEvent<K>
-where
-	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
-{
+impl SizedChunk for StackEvent {
 	fn size() -> usize {
-		K::size() + 1
+		HashedKey::size() + 1
 	}
 }
 
-impl<K> ReadChunk for StackEvent<K>
-where
-	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
-{
+impl ReadChunk for StackEvent {
 	fn from_chunk(buf: &[u8]) -> std::io::Result<Self> {
 		let event = match buf[0] {
 			EventByte::GET => {
-				let key = K::from_chunk(&buf[1..])?;
+				let key = HashedKey::from_chunk(&buf[1..])?;
 				StackEvent::Get(key)
 			},
 
 			EventByte::SET => {
-				let key = K::from_chunk(&buf[1..])?;
+				let key = HashedKey::from_chunk(&buf[1..])?;
 				StackEvent::Set(key)
 			},
 
 			EventByte::DEL => {
-				let key = K::from_chunk(&buf[1..])?;
+				let key = HashedKey::from_chunk(&buf[1..])?;
 				StackEvent::Del(key)
 			},
 
@@ -76,10 +64,7 @@ where
 	}
 }
 
-impl<K> WriteChunk for StackEvent<K>
-where
-	K: Copy + Eq + Hash + ReadChunk + WriteChunk,
-{
+impl WriteChunk for StackEvent {
 	fn as_chunk(&self, buf: &mut Vec<u8>) -> io::Result<()> {
 		match self {
 			StackEvent::Get(key) => {
@@ -99,7 +84,7 @@ where
 
 			StackEvent::Wipe => {
 				buf.push(EventByte::WIPE);
-				buf.extend_from_slice(&vec![0u8; K::size()]);
+				buf.extend_from_slice(&vec![0u8; HashedKey::size()]);
 			},
 		}
 

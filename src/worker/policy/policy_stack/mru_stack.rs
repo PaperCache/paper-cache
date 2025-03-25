@@ -1,37 +1,23 @@
-use std::{
-	hash::{Hash, BuildHasher},
-	collections::HashMap,
+use std::collections::HashMap;
+use dlv_list::{VecList, Index};
+
+use crate::{
+	cache::{HashedKey, NoHasher},
+	worker::policy::policy_stack::PolicyStack,
 };
 
-use dlv_list::{VecList, Index};
-use crate::worker::policy::policy_stack::PolicyStack;
-
-pub struct MruStack<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	map: HashMap<K, Index<K>, S>,
-	stack: VecList<K>,
+#[derive(Default)]
+pub struct MruStack {
+	map: HashMap<HashedKey, Index<HashedKey>, NoHasher>,
+	stack: VecList<HashedKey>,
 }
 
-impl<K, S> PolicyStack<K, S> for MruStack<K, S>
-where
-	K: Copy + Eq + Hash,
-	S: Clone + BuildHasher,
-{
-	fn with_hasher(hasher: S) -> Self {
-		MruStack {
-			map: HashMap::with_hasher(hasher),
-			stack: VecList::default(),
-		}
-	}
-
+impl PolicyStack for MruStack {
 	fn len(&self) -> usize {
 		self.map.len()
 	}
 
-	fn insert(&mut self, key: K) {
+	fn insert(&mut self, key: HashedKey) {
 		if self.map.contains_key(&key) {
 			return self.update(key);
 		}
@@ -40,7 +26,7 @@ where
 		self.map.insert(key, index);
 	}
 
-	fn update(&mut self, key: K) {
+	fn update(&mut self, key: HashedKey) {
 		if let Some(index) = self.map.get(&key) {
 			if let Some(key) = self.stack.remove(*index) {
 				let new_index = self.stack.push_front(key);
@@ -49,7 +35,7 @@ where
 		}
 	}
 
-	fn remove(&mut self, key: K) {
+	fn remove(&mut self, key: HashedKey) {
 		if let Some(index) = self.map.remove(&key) {
 			self.stack.remove(index);
 		}
@@ -60,7 +46,7 @@ where
 		self.stack.clear();
 	}
 
-	fn pop(&mut self) -> Option<K> {
+	fn pop(&mut self) -> Option<HashedKey> {
 		let evicted = self.stack.pop_front();
 
 		if let Some(key) = &evicted {
@@ -75,13 +61,15 @@ where
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use std::hash::RandomState;
-		use crate::worker::policy::policy_stack::{PolicyStack, MruStack};
+		use crate::{
+			cache::HashedKey,
+			worker::policy::policy_stack::{PolicyStack, MruStack},
+		};
 
-		let accesses: Vec<u32> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<u32> = vec![1, 3, 2, 0];
+		let accesses: Vec<HashedKey> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
+		let mut evictions: Vec<HashedKey> = vec![1, 3, 2, 0];
 
-		let mut stack = MruStack::<u32, RandomState>::with_hasher(RandomState::default());
+		let mut stack = MruStack::default();
 
 		for access in accesses {
 			stack.insert(access);

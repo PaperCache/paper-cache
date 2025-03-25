@@ -2,15 +2,19 @@ mod expiries;
 
 use std::{
 	thread,
-	hash::{Hash, BuildHasher},
 	time::{Instant, Duration},
 };
 
 use typesize::TypeSize;
-use kwik::file::binary::{ReadChunk, WriteChunk};
 
 use crate::{
-	cache::{ObjectMapRef, StatsRef, OverheadManagerRef, erase},
+	cache::{
+		ObjectMapRef,
+		StatsRef,
+		OverheadManagerRef,
+		EraseKey,
+		erase,
+	},
 	error::CacheError,
 	worker::{
 		Worker,
@@ -20,27 +24,21 @@ use crate::{
 	},
 };
 
-pub struct TtlWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
-	listener: WorkerReceiver<K>,
+pub struct TtlWorker<K, V> {
+	listener: WorkerReceiver,
 
-	objects: ObjectMapRef<K, V, S>,
+	objects: ObjectMapRef<K, V>,
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
-	expiries: Expiries<K>,
+	expiries: Expiries,
 }
 
-impl<K, V, S> Worker<K, V, S> for TtlWorker<K, V, S>
+impl<K, V> Worker for TtlWorker<K, V>
 where
 	Self: 'static + Send,
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
+	K: Eq + TypeSize,
+	V: TypeSize,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
@@ -74,7 +72,7 @@ where
 					&self.objects,
 					&self.stats,
 					&self.overhead_manager,
-					Some(key),
+					Some(EraseKey::Hashed(key)),
 				).ok();
 			}
 
@@ -88,15 +86,10 @@ where
 	}
 }
 
-impl<K, V, S> TtlWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Clone + BuildHasher,
-{
+impl<K, V> TtlWorker<K, V> {
 	pub fn new(
-		listener: WorkerReceiver<K>,
-		objects: ObjectMapRef<K, V, S>,
+		listener: WorkerReceiver,
+		objects: ObjectMapRef<K, V>,
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
 	) -> Self {
@@ -112,9 +105,4 @@ where
 	}
 }
 
-unsafe impl<K, V, S> Send for TtlWorker<K, V, S>
-where
-	K: 'static + Copy + Eq + Hash + Send + Sync + TypeSize + ReadChunk + WriteChunk,
-	V: 'static + Sync + TypeSize,
-	S: Default + Clone + BuildHasher,
-{}
+unsafe impl<K, V> Send for TtlWorker<K, V> {}

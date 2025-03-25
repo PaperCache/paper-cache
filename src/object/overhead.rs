@@ -17,14 +17,12 @@ pub struct OverheadManager {
 }
 
 impl OverheadManager {
-	pub fn total_size<K, V>(&self, key: K, object: &Object<V>) -> ObjectSize
+	pub fn total_size<K, V>(&self, object: &Object<K, V>) -> ObjectSize
 	where
 		K: TypeSize,
 		V: TypeSize,
 	{
-		let mut total_size = key.get_size() as ObjectSize
-			+ object.total_size()
-			+ self.policies_overhead_per_object;
+		let mut total_size = object.total_size() + self.policies_overhead_per_object;
 
 		if object.expiry().is_some() {
 			total_size += self.ttl_overhead_per_object;
