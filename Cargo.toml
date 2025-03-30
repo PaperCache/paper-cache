@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 dlv-list = "0.6.0"
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.14.10" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.15.1" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.2.1" }
 thiserror = "2.0.12"
 dashmap = "6.1.0"

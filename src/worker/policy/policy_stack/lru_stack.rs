@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use dlv_list::{VecList, Index};
+use kwik::collections::HashList;
 
 use crate::{
 	cache::{HashedKey, NoHasher},
@@ -8,52 +7,36 @@ use crate::{
 
 #[derive(Default)]
 pub struct LruStack {
-	map: HashMap<HashedKey, Index<HashedKey>, NoHasher>,
-	stack: VecList<HashedKey>,
+	stack: HashList<HashedKey, NoHasher>,
 }
 
 impl PolicyStack for LruStack {
 	fn len(&self) -> usize {
-		self.map.len()
+		self.stack.len()
 	}
 
 	fn insert(&mut self, key: HashedKey) {
-		if self.map.contains_key(&key) {
+		if self.stack.contains(&key) {
 			return self.update(key);
 		}
 
-		let index = self.stack.push_front(key);
-		self.map.insert(key, index);
+		self.stack.push_front(key);
 	}
 
 	fn update(&mut self, key: HashedKey) {
-		if let Some(index) = self.map.get(&key) {
-			if let Some(key) = self.stack.remove(*index) {
-				let new_index = self.stack.push_front(key);
-				self.map.insert(key, new_index);
-			}
-		}
+		self.stack.move_front(&key);
 	}
 
 	fn remove(&mut self, key: HashedKey) {
-		if let Some(index) = self.map.remove(&key) {
-			self.stack.remove(index);
-		}
+		self.stack.remove(&key);
 	}
 
 	fn clear(&mut self) {
-		self.map.clear();
 		self.stack.clear();
 	}
 
 	fn pop(&mut self) -> Option<HashedKey> {
-		let evicted = self.stack.pop_back();
-
-		if let Some(key) = &evicted {
-			self.map.remove(key);
-		}
-
-		evicted
+		self.stack.pop_back()
 	}
 }
 
@@ -80,7 +63,7 @@ mod tests {
 		while let Some(key) = stack.pop() {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
-				None => assert!(false),
+				None => unreachable!(),
 			}
 
 			eviction_count += 1;

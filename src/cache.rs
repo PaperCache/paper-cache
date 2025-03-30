@@ -187,9 +187,9 @@ where
 	/// cache.set(0, 0, None);
 	///
 	/// // Getting a key which exists in the cache will return the associated value.
-	/// assert!(cache.get(0).is_ok());
+	/// assert!(cache.get(&0).is_ok());
 	/// // Getting a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.get(1).is_err());
+	/// assert!(cache.get(&1).is_err());
 	/// ```
 	pub fn get(&self, key: &K) -> Result<Arc<V>, CacheError> {
 		let hashed_key = self.hash_key(key);
@@ -273,10 +273,10 @@ where
 	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None);
-	/// assert!(cache.del(0).is_ok());
+	/// assert!(cache.del(&0).is_ok());
 	///
 	/// // Deleting a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.del(1).is_err());
+	/// assert!(cache.del(&1).is_err());
 	/// ```
 	pub fn del(&self, key: &K) -> Result<(), CacheError> {
 		let hashed_key = self.hash_key(key);
@@ -310,8 +310,8 @@ where
 	///
 	/// cache.set(0, 0, None);
 	///
-	/// assert!(cache.has(0));
-	/// assert!(!cache.has(1));
+	/// assert!(cache.has(&0));
+	/// assert!(!cache.has(&1));
 	/// ```
 	pub fn has(&self, key: &K) -> bool {
 		let hashed_key = self.hash_key(key);
@@ -335,15 +335,15 @@ where
 	/// cache.set(1, 0, None);
 	///
 	/// // Peeking a key which exists in the cache will return the associated value.
-	/// assert!(cache.peek(0).is_ok());
+	/// assert!(cache.peek(&0).is_ok());
 	/// // Peeking a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.peek(2).is_err());
+	/// assert!(cache.peek(&2).is_err());
 	///
 	/// cache.set(2, 0, None);
 	///
 	/// // Peeking a key will not alter the eviction order of the objects.
-	/// assert!(cache.peek(1).is_ok());
-	/// assert!(cache.peek(2).is_ok());
+	/// assert!(cache.peek(&1).is_ok());
+	/// assert!(cache.peek(&2).is_ok());
 	/// ```
 	pub fn peek(&self, key: &K) -> Result<Arc<V>, CacheError> {
 		let hashed_key = self.hash_key(key);
@@ -366,7 +366,7 @@ where
 	/// let mut cache = PaperCache::<u32, u32>::new(1000, PaperPolicy::Lfu).unwrap();
 	///
 	/// cache.set(0, 0, None); // value will not expire
-	/// cache.ttl(0, Some(5)); // value will expire in 5 seconds
+	/// cache.ttl(&0, Some(5)); // value will expire in 5 seconds
 	/// ```
 	pub fn ttl(&self, key: &K, ttl: Option<u32>) -> Result<(), CacheError> {
 		let hashed_key = self.hash_key(key);
@@ -397,9 +397,9 @@ where
 	/// cache.set(0, 0, None);
 	///
 	/// // Sizing a key which exists in the cache will return the size of the associated value.
-	/// assert!(cache.size(0).is_ok());
+	/// assert!(cache.size(&0).is_ok());
 	/// // Sizing a key which does not exist in the cache will return a CacheError.
-	/// assert!(cache.size(1).is_err());
+	/// assert!(cache.size(&1).is_err());
 	/// ```
 	pub fn size(&self, key: &K) -> Result<ObjectSize, CacheError> {
 		let hashed_key = self.hash_key(key);
