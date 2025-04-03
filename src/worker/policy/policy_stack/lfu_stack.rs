@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use dlv_list::{VecList, Index};
+use kwik::collections::HashList;
 
 use crate::{
 	cache::{HashedKey, NoHasher},
@@ -8,18 +9,13 @@ use crate::{
 
 #[derive(Default)]
 pub struct LfuStack {
-	index_map: HashMap<HashedKey, KeyIndex, NoHasher>,
-	count_lists: VecList<CountList>,
+	index_map: HashMap<HashedKey, Index<CountStack>, NoHasher>,
+	count_stacks: VecList<CountStack>,
 }
 
-struct CountList {
+struct CountStack {
 	count: u32,
-	list: VecList<HashedKey>,
-}
-
-struct KeyIndex {
-	count_list_index: Index<CountList>,
-	list_index: Index<HashedKey>,
+	stack: HashList<HashedKey, NoHasher>,
 }
 
 impl PolicyStack for LfuStack {
@@ -32,134 +28,112 @@ impl PolicyStack for LfuStack {
 			return self.update(key);
 		}
 
-		if self.count_lists.front().is_none_or(|count_list| count_list.count != 1) {
-			self.count_lists.push_front(CountList::new(1));
+		if self.count_stacks.front().is_none_or(|count_stack| count_stack.count != 1) {
+			self.count_stacks.push_front(CountStack::new(1));
 		}
 
-		let count_list_index = self.count_lists.front_index().unwrap();
-		let count_list = self.count_lists.get_mut(count_list_index).unwrap();
+		let count_stack_index = self.count_stacks.front_index().unwrap();
+		let count_stack = self.count_stacks.get_mut(count_stack_index).unwrap();
 
-		let list_index = count_list.push(key);
+		count_stack.push(key);
 
-		self.index_map.insert(key, KeyIndex::new(
-			count_list_index,
-			list_index,
-		));
+		self.index_map.insert(key, count_stack_index);
 	}
 
 	fn update(&mut self, key: HashedKey) {
-		let Some(key_index) = self.index_map.get(&key) else {
+		let Some(count_stack_index) = self.index_map.get(&key) else {
 			return;
 		};
 
-		let prev_count_list_index = key_index.count_list_index;
-		let prev_count_list = self.count_lists.get_mut(prev_count_list_index).unwrap();
-		let prev_count = prev_count_list.count;
+		let prev_count_stack_index = *count_stack_index;
+		let prev_count_stack = self.count_stacks.get_mut(prev_count_stack_index).unwrap();
+		let prev_count = prev_count_stack.count;
 
-		prev_count_list.remove(key_index.list_index);
-		let prev_is_empty = prev_count_list.is_empty();
+		prev_count_stack.remove(key);
+		let prev_is_empty = prev_count_stack.is_empty();
 
-		if let Some(next_count_list_index) = self.count_lists.get_next_index(prev_count_list_index) {
-			let next_count_list = self.count_lists.get_mut(next_count_list_index).unwrap();
+		if let Some(next_count_stack_index) = self.count_stacks.get_next_index(prev_count_stack_index) {
+			let next_count_stack = self.count_stacks.get_mut(next_count_stack_index).unwrap();
 
-			if next_count_list.count == prev_count + 1 {
-				let list_index = next_count_list.push(key);
-
-				self.index_map.insert(key, KeyIndex::new(
-					next_count_list_index,
-					list_index,
-				));
+			if next_count_stack.count == prev_count + 1 {
+				next_count_stack.push(key);
+				self.index_map.insert(key, next_count_stack_index);
 
 				if prev_is_empty {
-					self.count_lists.remove(prev_count_list_index);
+					self.count_stacks.remove(prev_count_stack_index);
 				}
 
 				return;
 			}
 		}
 
-		let mut count_list = CountList::new(prev_count + 1);
+		let mut count_stack = CountStack::new(prev_count + 1);
+		count_stack.push(key);
 
-		let list_index = count_list.push(key);
-		let count_list_index = self.count_lists.insert_after(prev_count_list_index, count_list);
+		let count_stack_index = self.count_stacks.insert_after(prev_count_stack_index, count_stack);
 
-		self.index_map.insert(key, KeyIndex::new(
-			count_list_index,
-			list_index,
-		));
+		self.index_map.insert(key, count_stack_index);
 
 		if prev_is_empty {
-			self.count_lists.remove(prev_count_list_index);
+			self.count_stacks.remove(prev_count_stack_index);
 		}
 	}
 
 	fn remove(&mut self, key: HashedKey) {
-		let Some(key_index) = self.index_map.remove(&key) else {
+		let Some(count_stack_index) = self.index_map.remove(&key) else {
 			return;
 		};
 
-		let count_list = self.count_lists.get_mut(key_index.count_list_index).unwrap();
-		count_list.remove(key_index.list_index);
+		let count_stack = self.count_stacks.get_mut(count_stack_index).unwrap();
+		count_stack.remove(key);
 
-		if count_list.is_empty() {
-			self.count_lists.remove(key_index.count_list_index);
+		if count_stack.is_empty() {
+			self.count_stacks.remove(count_stack_index);
 		}
 	}
 
 	fn clear(&mut self) {
 		self.index_map.clear();
-		self.count_lists.clear();
+		self.count_stacks.clear();
 	}
 
 	fn pop(&mut self) -> Option<HashedKey> {
-		let count_list_index = self.count_lists.front_index()?;
-		let count_list = self.count_lists.get_mut(count_list_index)?;
+		let count_stack_index = self.count_stacks.front_index()?;
+		let count_stack = self.count_stacks.get_mut(count_stack_index)?;
 
-		let key = count_list.pop();
+		let key = count_stack.pop();
 		self.index_map.remove(&key);
 
-		if count_list.is_empty() {
-			self.count_lists.remove(count_list_index);
+		if count_stack.is_empty() {
+			self.count_stacks.remove(count_stack_index);
 		}
 
 		Some(key)
 	}
 }
 
-impl CountList {
+impl CountStack {
 	fn new(count: u32) -> Self {
-		CountList {
+		CountStack {
 			count,
-			list: VecList::new(),
+			stack: HashList::with_hasher(NoHasher::default()),
 		}
 	}
 
 	fn is_empty(&self) -> bool {
-		self.list.is_empty()
+		self.stack.is_empty()
 	}
 
-	fn push(&mut self, key: HashedKey) -> Index<HashedKey> {
-		self.list.push_front(key)
+	fn push(&mut self, key: HashedKey) {
+		self.stack.push_front(key);
 	}
 
 	fn pop(&mut self) -> HashedKey {
-		self.list.pop_back().unwrap()
+		self.stack.pop_back().unwrap()
 	}
 
-	fn remove(&mut self, index: Index<HashedKey>) {
-		self.list.remove(index).unwrap();
-	}
-}
-
-impl KeyIndex {
-	fn new(
-		count_list_index: Index<CountList>,
-		list_index: Index<HashedKey>,
-	) -> Self {
-		KeyIndex {
-			count_list_index,
-			list_index,
-		}
+	fn remove(&mut self, key: HashedKey) {
+		self.stack.remove(&key).unwrap();
 	}
 }
 
@@ -186,7 +160,7 @@ mod tests {
 		while let Some(key) = stack.pop() {
 			match evictions.pop() {
 				Some(eviction) => assert_eq!(key, eviction),
-				None => assert!(false),
+				None => unreachable!(),
 			}
 
 			eviction_count += 1;
