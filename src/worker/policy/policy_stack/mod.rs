@@ -4,7 +4,7 @@ mod mru_stack;
 mod fifo_stack;
 
 use crate::{
-	cache::HashedKey,
+	HashedKey,
 	policy::PaperPolicy,
 	worker::policy::policy_stack::{
 		lfu_stack::LfuStack,

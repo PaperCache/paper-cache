@@ -8,13 +8,11 @@ use std::{
 use typesize::TypeSize;
 
 use crate::{
-	cache::{
-		ObjectMapRef,
-		StatsRef,
-		OverheadManagerRef,
-		EraseKey,
-		erase,
-	},
+	ObjectMapRef,
+	StatsRef,
+	OverheadManagerRef,
+	EraseKey,
+	erase,
 	error::CacheError,
 	worker::{
 		Worker,

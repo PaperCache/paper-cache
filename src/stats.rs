@@ -1,8 +1,13 @@
-use std::sync::atomic::{Ordering, AtomicU64, AtomicUsize};
+use std::sync::{
+	Arc,
+	atomic::{Ordering, AtomicU64, AtomicUsize},
+};
+
 use kwik::time;
 
 use crate::{
-	cache::{CacheSize, AtomicCacheSize, POLICIES},
+	CacheSize,
+	AtomicCacheSize,
 	error::CacheError,
 	policy::PaperPolicy,
 };
@@ -31,6 +36,7 @@ pub struct AtomicStats {
 	total_sets: AtomicU64,
 	total_dels: AtomicU64,
 
+	policies: Arc<[PaperPolicy]>,
 	policy_index: AtomicUsize,
 
 	start_time: AtomicU64,
@@ -78,7 +84,7 @@ impl Stats {
 		1.0 - self.total_hits as f64 / self.total_gets as f64
 	}
 
-	/// Returns the cache's current eviction policy index.
+	/// Returns the cache's current eviction policy.
 	#[must_use]
 	pub fn get_policy(&self) -> PaperPolicy {
 		self.policy
@@ -94,8 +100,13 @@ impl Stats {
 /// This struct holds the basic statistical information about `PaperCache`
 /// and allows for atomic updates of its fields.
 impl AtomicStats {
-	pub fn new(max_size: CacheSize, policy: PaperPolicy) -> Result<Self, CacheError> {
-		let policy_index = get_policy_index(policy)?;
+	pub fn new(
+		max_size: CacheSize,
+		policies: &[PaperPolicy],
+		policy: PaperPolicy,
+	) -> Result<Self, CacheError> {
+		let policies: Arc<[PaperPolicy]> = policies.into();
+		let policy_index = get_policy_index(&policies, policy)?;
 
 		let stats = AtomicStats {
 			max_size: AtomicU64::new(max_size),
@@ -106,6 +117,7 @@ impl AtomicStats {
 			total_sets: AtomicU64::default(),
 			total_dels: AtomicU64::default(),
 
+			policies,
 			policy_index: AtomicUsize::new(policy_index),
 
 			start_time: AtomicU64::new(time::timestamp()),
@@ -117,6 +129,11 @@ impl AtomicStats {
 	#[must_use]
 	pub fn get_max_size(&self) -> CacheSize {
 		self.max_size.load(Ordering::Relaxed)
+	}
+
+	#[must_use]
+	pub fn get_policies(&self) -> &[PaperPolicy] {
+		&self.policies
 	}
 
 	pub fn hit(&self) {
@@ -149,7 +166,7 @@ impl AtomicStats {
 	}
 
 	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		let index = get_policy_index(policy)?;
+		let index = get_policy_index(&self.policies, policy)?;
 		self.policy_index.store(index, Ordering::Relaxed);
 
 		Ok(())
@@ -180,15 +197,18 @@ impl AtomicStats {
 			total_sets: self.total_sets.load(Ordering::Relaxed),
 			total_dels: self.total_dels.load(Ordering::Relaxed),
 
-			policy: POLICIES[self.policy_index.load(Ordering::Relaxed)],
+			policy: self.policies[self.policy_index.load(Ordering::Relaxed)],
 
 			start_time: self.start_time.load(Ordering::Relaxed),
 		}
 	}
 }
 
-fn get_policy_index(policy: PaperPolicy) -> Result<usize, CacheError> {
-	POLICIES
+fn get_policy_index(
+	policies: &[PaperPolicy],
+	policy: PaperPolicy,
+) -> Result<usize, CacheError> {
+	policies
 		.iter()
 		.position(|configured_policy| configured_policy.eq(&policy))
 		.ok_or(CacheError::Internal)

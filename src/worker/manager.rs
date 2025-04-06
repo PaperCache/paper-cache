@@ -3,7 +3,9 @@ use typesize::TypeSize;
 use crossbeam_channel::unbounded;
 
 use crate::{
-	cache::{ObjectMapRef, StatsRef, OverheadManagerRef},
+	ObjectMapRef,
+	StatsRef,
+	OverheadManagerRef,
 	error::CacheError,
 	policy::PaperPolicy,
 	worker::{

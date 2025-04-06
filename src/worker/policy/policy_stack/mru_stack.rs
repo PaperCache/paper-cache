@@ -1,7 +1,8 @@
 use kwik::collections::HashList;
 
 use crate::{
-	cache::{HashedKey, NoHasher},
+	HashedKey,
+	NoHasher,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -45,7 +46,7 @@ mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
 		use crate::{
-			cache::HashedKey,
+			HashedKey,
 			worker::policy::policy_stack::{PolicyStack, MruStack},
 		};
 

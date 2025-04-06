@@ -6,7 +6,8 @@ use std::thread;
 use crossbeam_channel::{Sender, Receiver};
 
 use crate::{
-	cache::{CacheSize, HashedKey},
+	CacheSize,
+	HashedKey,
 	error::CacheError,
 	object::{ObjectSize, ExpireTime},
 	policy::PaperPolicy,

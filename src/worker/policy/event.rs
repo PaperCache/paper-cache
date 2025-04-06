@@ -2,7 +2,7 @@ use std::io;
 use kwik::file::binary::{SizedChunk, ReadChunk, WriteChunk};
 
 use crate::{
-	cache::HashedKey,
+	HashedKey,
 	worker::WorkerEvent,
 };
 

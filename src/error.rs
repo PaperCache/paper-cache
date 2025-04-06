@@ -16,4 +16,13 @@ pub enum CacheError {
 
 	#[error("the cache size cannot be zero")]
 	ZeroCacheSize,
+
+	#[error("cannot configure duplicate eviction policies")]
+	DuplicatePolicies,
+
+	#[error("the policy is not configured")]
+	UnconfiguredPolicy,
+
+	#[error("invalid policy")]
+	InvalidPolicy,
 }

@@ -21,16 +21,13 @@ use kwik::{
 };
 
 use crate::{
-	cache::{
-		CacheSize,
-		HashedKey,
-		ObjectMapRef,
-		StatsRef,
-		OverheadManagerRef,
-		EraseKey,
-		erase,
-		POLICIES,
-	},
+	CacheSize,
+	HashedKey,
+	ObjectMapRef,
+	StatsRef,
+	OverheadManagerRef,
+	EraseKey,
+	erase,
 	object::ObjectSize,
 	error::CacheError,
 	policy::PaperPolicy,
@@ -173,7 +170,8 @@ where
 	) -> Self {
 		let max_cache_size = stats.get_max_size();
 
-		let mini_policy_stacks = POLICIES
+		let mini_policy_stacks = stats
+			.get_policies()
 			.iter()
 			.map(|policy| PolicyStackType::new(*policy))
 			.collect::<Box<[_]>>();
@@ -269,9 +267,8 @@ where
 		}
 
 		info!(
-			"Switching policy {} to {}",
-			self.current_policy.read().label(),
-			policy.label(),
+			"Switching policy {} to {policy}",
+			self.current_policy.read(),
 		);
 
 		*self.current_policy.write() = policy;
@@ -288,7 +285,7 @@ where
 		let trace_fragments = self.trace_fragments.clone();
 
 		thread::spawn(move || {
-			info!("Reconstructing {} stack", policy.label());
+			info!("Reconstructing {policy} stack");
 			let now = Instant::now();
 
 			let reconstruction_result = reconstruct_policy_stack(
@@ -302,8 +299,7 @@ where
 				// before sending the reconstructed stack
 				if policy == *current_policy.read() {
 					info!(
-						"{} stack reconstructed with {} object(s) in {:?}",
-						policy.label(),
+						"{policy} stack reconstructed with {} object(s) in {:?}",
 						fmt::number(stack.len()),
 						now.elapsed(),
 					);

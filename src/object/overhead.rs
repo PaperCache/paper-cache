@@ -6,7 +6,6 @@ use std::{
 use typesize::TypeSize;
 
 use crate::{
-	cache::POLICIES,
 	policy::PaperPolicy,
 	object::{Object, ObjectSize},
 };
@@ -17,26 +16,10 @@ pub struct OverheadManager {
 }
 
 impl OverheadManager {
-	pub fn total_size<K, V>(&self, object: &Object<K, V>) -> ObjectSize
-	where
-		K: TypeSize,
-		V: TypeSize,
-	{
-		let mut total_size = object.total_size() + self.policies_overhead_per_object;
-
-		if object.expiry().is_some() {
-			total_size += self.ttl_overhead_per_object;
-		}
-
-		total_size
-	}
-}
-
-impl Default for OverheadManager {
-	fn default() -> Self {
+	pub fn new(policies: &[PaperPolicy]) -> Self {
 		// the overheads are just rough estimates of the number of bytes per object
 
-		let policies_overhead_per_object = POLICIES
+		let policies_overhead_per_object = policies
 			.iter()
 			.map(|policy| match policy {
 				// 8 bytes for the key of the HashMap, 16 bytes for KeyIndex, 8 bytes for the CountList
@@ -60,5 +43,19 @@ impl Default for OverheadManager {
 			policies_overhead_per_object,
 			ttl_overhead_per_object,
 		}
+	}
+
+	pub fn total_size<K, V>(&self, object: &Object<K, V>) -> ObjectSize
+	where
+		K: TypeSize,
+		V: TypeSize,
+	{
+		let mut total_size = object.total_size() + self.policies_overhead_per_object;
+
+		if object.expiry().is_some() {
+			total_size += self.ttl_overhead_per_object;
+		}
+
+		total_size
 	}
 }

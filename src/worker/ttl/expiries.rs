@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-	cache::HashedKey,
+	HashedKey,
 	object::{ExpireTime, get_expiry_from_ttl},
 };
 
