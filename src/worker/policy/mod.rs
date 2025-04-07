@@ -113,7 +113,9 @@ where
 						self.used_cache_size = 0;
 					},
 
-					WorkerEvent::Resize(max_cache_size) => self.max_cache_size = max_cache_size,
+					WorkerEvent::Resize(max_cache_size) => {
+						self.handle_resize(max_cache_size);
+					},
 
 					WorkerEvent::Policy(policy) => {
 						self.handle_policy(policy, policy_reconstruct_tx.clone());
@@ -169,14 +171,15 @@ where
 		policy: PaperPolicy,
 	) -> Result<Self, CacheError> {
 		let max_cache_size = stats.get_max_size();
+		let mini_size = get_mini_stack_size(max_cache_size);
 
 		let mini_policy_stacks = stats
 			.get_policies()
 			.iter()
-			.map(|policy| PolicyStackType::new(*policy))
+			.map(|policy| PolicyStackType::new(*policy, mini_size))
 			.collect::<Box<[_]>>();
 
-		let policy_stack = PolicyStackType::new(policy);
+		let policy_stack = PolicyStackType::new(policy, max_cache_size);
 
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
@@ -265,6 +268,20 @@ where
 		}
 	}
 
+	fn handle_resize(&mut self, size: CacheSize) {
+		self.max_cache_size = size;
+
+		if let Some(stack) = &mut self.policy_stack {
+			stack.resize(size);
+		}
+
+		let mini_size = get_mini_stack_size(size);
+
+		for mini_stack in &mut self.mini_policy_stacks {
+			mini_stack.resize(mini_size);
+		}
+	}
+
 	fn handle_policy(
 		&mut self,
 		policy: PaperPolicy,
@@ -289,6 +306,7 @@ where
 		self.policy_stack = None;
 		self.mini_policy_index = Some(mini_policy_index);
 
+		let max_cache_size = self.max_cache_size;
 		let current_policy = self.current_policy.clone();
 		let trace_fragments = self.trace_fragments.clone();
 
@@ -298,6 +316,7 @@ where
 
 			let reconstruction_result = reconstruct_policy_stack(
 				policy,
+				max_cache_size,
 				current_policy.clone(),
 				trace_fragments.clone(),
 			);
@@ -452,10 +471,11 @@ where
 
 fn reconstruct_policy_stack(
 	policy: PaperPolicy,
+	max_size: CacheSize,
 	current_policy: Arc<RwLock<PaperPolicy>>,
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 ) -> Result<PolicyStackType, CacheError> {
-	let mut stack = PolicyStackType::new(policy);
+	let mut stack = PolicyStackType::new(policy, max_size);
 
 	for fragment in trace_fragments.read().iter() {
 		let mut fragment_modifiers = fragment.lock();
@@ -501,6 +521,11 @@ fn reconstruct_policy_stack(
 	}
 
 	Ok(stack)
+}
+
+fn get_mini_stack_size(size: CacheSize) -> CacheSize {
+	let ratio = MINI_SAMPLING_THRESHOLD as f64 / MINI_SAMPLING_MODULUS as f64;
+	(size as f64 * ratio) as u64
 }
 
 unsafe impl<K, V> Send for PolicyWorker<K, V>

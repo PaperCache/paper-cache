@@ -22,17 +22,22 @@ impl OverheadManager {
 		let policies_overhead_per_object = policies
 			.iter()
 			.map(|policy| match policy {
-				// 8 bytes for the key of the HashMap, 16 bytes for KeyIndex, 8 bytes for the CountList
-				PaperPolicy::Lfu => 32,
+				// 16 bytes for the HashMap entry 32 bytes for the HashList entry,
+				// 8 bytes for the HashedKey, 4 bytes for the count
+				PaperPolicy::Lfu => 60,
 
-				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
-				PaperPolicy::Fifo => 24,
+				// 32 bytes for the HashList entry, 8 bytes for the HashedKey
+				PaperPolicy::Fifo => 40,
 
-				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
-				PaperPolicy::Lru => 24,
+				// 32 bytes for the HashList entry, 8 bytes for the HashedKey
+				PaperPolicy::Lru => 40,
 
-				// 16 bytes for the key and value of the HashMap, 8 bytes for the VecList
-				PaperPolicy::Mru => 24,
+				// 32 bytes for the HashList entry, 8 bytes for the HashedKey
+				PaperPolicy::Mru => 40,
+
+				// 32 bytes for the HashList entry, 8 bytes for the HashedKey,
+				// 4 bytes for the object size
+				PaperPolicy::TwoQ(_, _) => 44,
 			})
 			.sum();
 

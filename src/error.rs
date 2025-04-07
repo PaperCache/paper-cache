@@ -20,7 +20,7 @@ pub enum CacheError {
 	#[error("cannot configure duplicate eviction policies")]
 	DuplicatePolicies,
 
-	#[error("the policy is not configured")]
+	#[error("unconfigured policy")]
 	UnconfiguredPolicy,
 
 	#[error("invalid policy")]

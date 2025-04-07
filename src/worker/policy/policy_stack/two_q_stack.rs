@@ -13,7 +13,6 @@ use crate::{
 	worker::policy::policy_stack::PolicyStack,
 };
 
-#[derive(Default)]
 pub struct TwoQStack {
 	k_in: f64,
 	k_out: f64,
@@ -23,7 +22,6 @@ pub struct TwoQStack {
 	am: Stack,
 }
 
-#[derive(Default)]
 struct Stack {
 	stack: HashList<Object, NoHasher>,
 
@@ -72,9 +70,9 @@ impl PolicyStack for TwoQStack {
 		self.am.remove(key);
 	}
 
-	fn resize(&mut self, size: CacheSize) {
-		self.a1_in.max_size = Some((self.k_in * size as f64) as u64);
-		self.a1_out.max_size = Some((self.k_out * size as f64) as u64);
+	fn resize(&mut self, max_size: CacheSize) {
+		self.a1_in.max_size = Some((self.k_in * max_size as f64) as u64);
+		self.a1_out.max_size = Some((self.k_out * max_size as f64) as u64);
 	}
 
 	fn clear(&mut self) {
@@ -84,10 +82,12 @@ impl PolicyStack for TwoQStack {
 	}
 
 	fn pop(&mut self) -> Option<HashedKey> {
-		if self.a1_out.is_full() {
-			if let Some(object) = self.a1_out.pop() {
-				return Some(object.key);
-			}
+		if let Some(object) = self.a1_out.pop() {
+			return Some(object.key);
+		}
+
+		if let Some(object) = self.a1_in.pop() {
+			return Some(object.key);
 		}
 
 		self.am
@@ -97,7 +97,19 @@ impl PolicyStack for TwoQStack {
 }
 
 impl TwoQStack {
-	pub fn new(k_in: f64, k_out: f64) -> Self {
+	pub fn new(k_in: f64, k_out: f64, max_size: CacheSize) -> Self {
+		let a1_in = Stack::new(Some((k_in * max_size as f64) as u64));
+		let a1_out = Stack::new(Some((k_out * max_size as f64) as u64));
+		let am = Stack::new(None);
+
+		TwoQStack {
+			k_in,
+			k_out,
+
+			a1_in,
+			a1_out,
+			am,
+		}
 	}
 
 	fn contains(&self, key: HashedKey) -> bool {
@@ -118,20 +130,21 @@ impl TwoQStack {
 }
 
 impl Stack {
+	fn new(max_size: Option<CacheSize>) -> Self {
+		Stack {
+			stack: HashList::with_hasher(NoHasher::default()),
+
+			used_size: 0,
+			max_size,
+		}
+	}
+
 	fn can_fit(&self, object_size: ObjectSize) -> bool {
 		let Some(max_stack_size) = self.max_size else {
 			return true;
 		};
 
 		self.used_size + object_size as CacheSize <= max_stack_size
-	}
-
-	fn is_full(&self) -> bool {
-		let Some(max_stack_size) = self.max_size else {
-			return false;
-		};
-
-		self.used_size >= max_stack_size
 	}
 
 	fn insert(&mut self, object: Object) {
@@ -211,10 +224,10 @@ mod tests {
 			worker::policy::policy_stack::{PolicyStack, TwoQStack},
 		};
 
-		let accesses: Vec<HashedKey> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<HashedKey> = vec![3, 2, 1, 0];
+		let accesses: Vec<HashedKey> = vec![0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0];
+		let mut evictions: Vec<HashedKey> = vec![0, 2, 1, 5, 4, 3];
 
-		let mut stack = TwoQStack::default();
+		let mut stack = TwoQStack::new(0.25, 0.5, 4);
 
 		for access in accesses {
 			stack.insert(access, 1);
@@ -231,6 +244,6 @@ mod tests {
 			eviction_count += 1;
 		}
 
-		assert_eq!(eviction_count, 4);
+		assert_eq!(eviction_count, 6);
 	}
 }

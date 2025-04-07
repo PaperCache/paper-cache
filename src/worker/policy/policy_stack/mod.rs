@@ -103,18 +103,35 @@ impl PolicyStack for PolicyStackType {
 
 impl PolicyStackType {
 	#[must_use]
-	pub fn new(policy: PaperPolicy) -> Self {
+	pub fn new(policy: PaperPolicy, max_size: CacheSize) -> Self {
 		match policy {
 			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
 			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
 			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),
 			PaperPolicy::Mru => PolicyStackType::Mru(Box::default()),
+
+			PaperPolicy::TwoQ(k_in, k_out) => {
+				let stack = TwoQStack::new(k_in, k_out, max_size);
+				PolicyStackType::TwoQ(Box::new(stack))
+			}
 		}
 	}
 
 	#[must_use]
 	pub fn is_policy(&self, policy: PaperPolicy) -> bool {
-		self == policy
+		self.eq(&policy)
+	}
+}
+
+impl PartialEq<PaperPolicy> for PolicyStackType {
+	fn eq(&self, policy: &PaperPolicy) -> bool {
+		policy.eq(self)
+	}
+}
+
+impl PartialEq<PaperPolicy> for &PolicyStackType {
+	fn eq(&self, policy: &PaperPolicy) -> bool {
+		policy.eq(self)
 	}
 }
 

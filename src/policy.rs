@@ -10,7 +10,7 @@ use serde::{
 
 use crate::error::CacheError;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum PaperPolicy {
 	Lfu,
 	Fifo,
@@ -34,12 +34,14 @@ impl Display for PaperPolicy {
 impl FromStr for PaperPolicy {
 	type Err = CacheError;
 
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let policy = match s {
+	fn from_str(value: &str) -> Result<Self, Self::Err> {
+		let policy = match value {
 			"lfu" => PaperPolicy::Lfu,
 			"fifo" => PaperPolicy::Fifo,
 			"lru" => PaperPolicy::Lru,
 			"mru" => PaperPolicy::Mru,
+
+			value if value.starts_with("2q-") => parse_two_q(value)?,
 
 			_ => return Err(CacheError::InvalidPolicy),
 		};
@@ -73,4 +75,32 @@ impl Visitor<'_> for PaperPolicyVisitor {
 		PaperPolicy::from_str(value)
 			.map_err(|err| E::custom(err.to_string()))
 	}
+}
+
+fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
+	// skip the "2q-"
+	let tokens = value[3..]
+		.split('-')
+		.collect::<Vec<&str>>();
+
+	if tokens.len() != 2 {
+		return Err(CacheError::InvalidPolicy);
+	}
+
+	let Ok(k_in) = tokens[0].parse::<f64>() else {
+		return Err(CacheError::InvalidPolicy);
+	};
+
+	let Ok(k_out) = tokens[1].parse::<f64>() else {
+		return Err(CacheError::InvalidPolicy);
+	};
+
+	if k_in < 0.0 || k_in > 1.0
+		|| k_out < 0.0 || k_out > 1.0
+		|| k_in + k_out > 1.0
+	{
+		return Err(CacheError::InvalidPolicy);
+	}
+
+	Ok(PaperPolicy::TwoQ(k_in, k_out))
 }

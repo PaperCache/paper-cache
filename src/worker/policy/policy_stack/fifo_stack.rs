@@ -53,7 +53,7 @@ mod tests {
 		let mut stack = FifoStack::default();
 
 		for access in accesses {
-			stack.insert(access);
+			stack.insert(access, 1);
 		}
 
 		let mut eviction_count = 0;
