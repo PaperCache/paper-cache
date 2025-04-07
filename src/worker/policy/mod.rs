@@ -300,7 +300,7 @@ where
 
 		let mini_policy_index = self.mini_policy_stacks
 			.iter()
-			.position(|mini_stack| mini_stack.is_policy(policy))
+			.position(|mini_stack| mini_stack.is_policy(&policy))
 			.unwrap_or(0);
 
 		self.policy_stack = None;

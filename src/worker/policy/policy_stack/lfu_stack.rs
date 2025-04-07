@@ -5,6 +5,7 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
+	policy::PaperPolicy,
 	object::ObjectSize,
 	worker::policy::policy_stack::PolicyStack,
 };
@@ -21,6 +22,10 @@ struct CountStack {
 }
 
 impl PolicyStack for LfuStack {
+	fn is_policy(&self, policy: &PaperPolicy) -> bool {
+		matches!(policy, PaperPolicy::Lfu)
+	}
+
 	fn len(&self) -> usize {
 		self.index_map.len()
 	}

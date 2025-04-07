@@ -9,6 +9,7 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	NoHasher,
+	policy::PaperPolicy,
 	object::ObjectSize,
 	worker::policy::policy_stack::PolicyStack,
 };
@@ -35,6 +36,14 @@ struct Object {
 }
 
 impl PolicyStack for TwoQStack {
+	fn is_policy(&self, policy: &PaperPolicy) -> bool {
+		let PaperPolicy::TwoQ(k_in, k_out) = policy else {
+			return false;
+		};
+
+		self.k_in == *k_in && self.k_out == *k_out
+	}
+
 	fn len(&self) -> usize {
 		self.a1_in.stack.len()
 			+ self.a1_out.stack.len()

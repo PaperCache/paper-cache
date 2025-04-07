@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub trait PolicyStack {
+	fn is_policy(&self, policy: &PaperPolicy) -> bool;
 	fn len(&self) -> usize;
 
 	fn insert(&mut self, key: HashedKey, size: ObjectSize);
@@ -40,6 +41,16 @@ pub enum PolicyStackType {
 }
 
 impl PolicyStack for PolicyStackType {
+	fn is_policy(&self, policy: &PaperPolicy) -> bool {
+		match self {
+			PolicyStackType::Lfu(stack) => stack.is_policy(policy),
+			PolicyStackType::Fifo(stack) => stack.is_policy(policy),
+			PolicyStackType::Lru(stack) => stack.is_policy(policy),
+			PolicyStackType::Mru(stack) => stack.is_policy(policy),
+			PolicyStackType::TwoQ(stack) => stack.is_policy(policy),
+		}
+	}
+
 	fn len(&self) -> usize {
 		match self {
 			PolicyStackType::Lfu(stack) => stack.len(),
@@ -113,42 +124,7 @@ impl PolicyStackType {
 			PaperPolicy::TwoQ(k_in, k_out) => {
 				let stack = TwoQStack::new(k_in, k_out, max_size);
 				PolicyStackType::TwoQ(Box::new(stack))
-			}
+			},
 		}
-	}
-
-	#[must_use]
-	pub fn is_policy(&self, policy: PaperPolicy) -> bool {
-		self.eq(&policy)
-	}
-}
-
-impl PartialEq<PaperPolicy> for PolicyStackType {
-	fn eq(&self, policy: &PaperPolicy) -> bool {
-		policy.eq(self)
-	}
-}
-
-impl PartialEq<PaperPolicy> for &PolicyStackType {
-	fn eq(&self, policy: &PaperPolicy) -> bool {
-		policy.eq(self)
-	}
-}
-
-impl PartialEq<PolicyStackType> for PaperPolicy {
-	fn eq(&self, policy_type: &PolicyStackType) -> bool {
-		self.eq(&policy_type)
-	}
-}
-
-impl PartialEq<&PolicyStackType> for PaperPolicy {
-	fn eq(&self, policy_type: &&PolicyStackType) -> bool {
-		matches!(
-			(self, policy_type),
-			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))
-			| (PaperPolicy::Fifo, PolicyStackType::Fifo(_))
-			| (PaperPolicy::Lru, PolicyStackType::Lru(_))
-			| (PaperPolicy::Mru, PolicyStackType::Mru(_))
-		)
 	}
 }

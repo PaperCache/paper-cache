@@ -3,6 +3,7 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
+	policy::PaperPolicy,
 	object::ObjectSize,
 	worker::policy::policy_stack::PolicyStack,
 };
@@ -13,6 +14,10 @@ pub struct FifoStack {
 }
 
 impl PolicyStack for FifoStack {
+	fn is_policy(&self, policy: &PaperPolicy) -> bool {
+		matches!(policy, PaperPolicy::Fifo)
+	}
+
 	fn len(&self) -> usize {
 		self.stack.len()
 	}
