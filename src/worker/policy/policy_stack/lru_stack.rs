@@ -3,6 +3,7 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
+	object::ObjectSize,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -16,7 +17,7 @@ impl PolicyStack for LruStack {
 		self.stack.len()
 	}
 
-	fn insert(&mut self, key: HashedKey) {
+	fn insert(&mut self, key: HashedKey, _: ObjectSize) {
 		if self.stack.contains(&key) {
 			return self.update(key);
 		}

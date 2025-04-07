@@ -5,6 +5,7 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
+	object::ObjectSize,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -24,7 +25,7 @@ impl PolicyStack for LfuStack {
 		self.index_map.len()
 	}
 
-	fn insert(&mut self, key: HashedKey) {
+	fn insert(&mut self, key: HashedKey, _: ObjectSize) {
 		if self.index_map.contains_key(&key) {
 			return self.update(key);
 		}

@@ -16,6 +16,7 @@ pub enum PaperPolicy {
 	Fifo,
 	Lru,
 	Mru,
+	TwoQ(f64, f64),
 }
 
 impl Display for PaperPolicy {
@@ -25,6 +26,7 @@ impl Display for PaperPolicy {
 			PaperPolicy::Fifo => write!(f, "fifo"),
 			PaperPolicy::Lru => write!(f, "lru"),
 			PaperPolicy::Mru => write!(f, "mru"),
+			PaperPolicy::TwoQ(k_in, k_out) => write!(f, "2q-{k_in}-{k_out}"),
 		}
 	}
 }

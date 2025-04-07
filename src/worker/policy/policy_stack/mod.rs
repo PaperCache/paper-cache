@@ -1,29 +1,31 @@
 mod lfu_stack;
+mod fifo_stack;
 mod lru_stack;
 mod mru_stack;
-mod fifo_stack;
+mod two_q_stack;
 
 use crate::{
+	CacheSize,
 	HashedKey,
 	policy::PaperPolicy,
+	object::ObjectSize,
 	worker::policy::policy_stack::{
 		lfu_stack::LfuStack,
 		lru_stack::LruStack,
 		mru_stack::MruStack,
 		fifo_stack::FifoStack,
+		two_q_stack::TwoQStack,
 	},
 };
 
-pub trait PolicyStack
-where
-	Self: Default,
-{
+pub trait PolicyStack {
 	fn len(&self) -> usize;
 
-	fn insert(&mut self, key: HashedKey);
-	fn update(&mut self, _: HashedKey) {}
+	fn insert(&mut self, key: HashedKey, size: ObjectSize);
+	fn update(&mut self, _key: HashedKey) {}
 	fn remove(&mut self, key: HashedKey);
 
+	fn resize(&mut self, _size: CacheSize) {}
 	fn clear(&mut self);
 
 	fn pop(&mut self) -> Option<HashedKey>;
@@ -34,6 +36,7 @@ pub enum PolicyStackType {
 	Fifo(Box<FifoStack>),
 	Lru(Box<LruStack>),
 	Mru(Box<MruStack>),
+	TwoQ(Box<TwoQStack>),
 }
 
 impl PolicyStack for PolicyStackType {
@@ -43,15 +46,17 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Fifo(stack) => stack.len(),
 			PolicyStackType::Lru(stack) => stack.len(),
 			PolicyStackType::Mru(stack) => stack.len(),
+			PolicyStackType::TwoQ(stack) => stack.len(),
 		}
 	}
 
-	fn insert(&mut self, key: HashedKey) {
+	fn insert(&mut self, key: HashedKey, size: ObjectSize) {
 		match self {
-			PolicyStackType::Lfu(stack) => stack.insert(key),
-			PolicyStackType::Fifo(stack) => stack.insert(key),
-			PolicyStackType::Lru(stack) => stack.insert(key),
-			PolicyStackType::Mru(stack) => stack.insert(key),
+			PolicyStackType::Lfu(stack) => stack.insert(key, size),
+			PolicyStackType::Fifo(stack) => stack.insert(key, size),
+			PolicyStackType::Lru(stack) => stack.insert(key, size),
+			PolicyStackType::Mru(stack) => stack.insert(key, size),
+			PolicyStackType::TwoQ(stack) => stack.insert(key, size),
 		}
 	}
 
@@ -61,6 +66,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Fifo(stack) => stack.update(key),
 			PolicyStackType::Lru(stack) => stack.update(key),
 			PolicyStackType::Mru(stack) => stack.update(key),
+			PolicyStackType::TwoQ(stack) => stack.update(key),
 		}
 	}
 
@@ -70,6 +76,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Fifo(stack) => stack.remove(key),
 			PolicyStackType::Lru(stack) => stack.remove(key),
 			PolicyStackType::Mru(stack) => stack.remove(key),
+			PolicyStackType::TwoQ(stack) => stack.remove(key),
 		}
 	}
 
@@ -79,6 +86,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Fifo(stack) => stack.clear(),
 			PolicyStackType::Lru(stack) => stack.clear(),
 			PolicyStackType::Mru(stack) => stack.clear(),
+			PolicyStackType::TwoQ(stack) => stack.clear(),
 		}
 	}
 
@@ -88,6 +96,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Fifo(stack) => stack.pop(),
 			PolicyStackType::Lru(stack) => stack.pop(),
 			PolicyStackType::Mru(stack) => stack.pop(),
+			PolicyStackType::TwoQ(stack) => stack.pop(),
 		}
 	}
 }
@@ -105,19 +114,7 @@ impl PolicyStackType {
 
 	#[must_use]
 	pub fn is_policy(&self, policy: PaperPolicy) -> bool {
-		matches!(
-			(policy, self),
-			(PaperPolicy::Lfu, PolicyStackType::Lfu(_))
-			| (PaperPolicy::Fifo, PolicyStackType::Fifo(_))
-			| (PaperPolicy::Lru, PolicyStackType::Lru(_))
-			| (PaperPolicy::Mru, PolicyStackType::Mru(_))
-		)
-	}
-}
-
-impl Default for PolicyStackType {
-	fn default() -> Self {
-		unreachable!();
+		self == policy
 	}
 }
 

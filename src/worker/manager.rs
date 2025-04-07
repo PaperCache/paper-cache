@@ -45,7 +45,7 @@ impl WorkerManager {
 		stats: &StatsRef,
 		overhead_manager: &OverheadManagerRef,
 		policy: PaperPolicy,
-	) -> Self
+	) -> Result<Self, CacheError>
 	where
 		K: 'static + Eq + TypeSize,
 		V: 'static + TypeSize,
@@ -59,7 +59,7 @@ impl WorkerManager {
 			stats.clone(),
 			overhead_manager.clone(),
 			policy,
-		));
+		)?);
 
 		register_worker(TtlWorker::<K, V>::new(
 			ttl_listener,
@@ -73,10 +73,12 @@ impl WorkerManager {
 			ttl_worker,
 		]));
 
-		WorkerManager {
+		let manager = WorkerManager {
 			listener,
 			workers,
-		}
+		};
+
+		Ok(manager)
 	}
 }
 

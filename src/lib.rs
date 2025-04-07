@@ -181,7 +181,7 @@ where
 			&stats,
 			&overhead_manager,
 			policy,
-		);
+		)?;
 
 		thread::spawn(move || worker_manager.run());
 

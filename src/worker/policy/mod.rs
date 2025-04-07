@@ -167,7 +167,7 @@ where
 		stats: StatsRef,
 		overhead_manager: OverheadManagerRef,
 		policy: PaperPolicy,
-	) -> Self {
+	) -> Result<Self, CacheError> {
 		let max_cache_size = stats.get_max_size();
 
 		let mini_policy_stacks = stats
@@ -186,7 +186,13 @@ where
 			trace_fragments.clone(),
 		));
 
-		PolicyWorker {
+		// we need the initial size so we can accurately reconstruct the
+		// policy stacks after the cache is resized
+		trace_worker
+			.send(StackEvent::Resize(stats.get_max_size()))
+			.map_err(|_| CacheError::Internal)?;
+
+		let worker = PolicyWorker {
 			listener,
 
 			objects,
@@ -207,7 +213,9 @@ where
 			current_policy: Arc::new(RwLock::new(policy)),
 
 			last_set_time: None,
-		}
+		};
+
+		Ok(worker)
 	}
 
 	fn handle_get(&mut self, key: HashedKey) {
@@ -229,12 +237,12 @@ where
 		old_size: Option<ObjectSize>,
 	) {
 		if let Some(stack) = &mut self.policy_stack {
-			stack.insert(key);
+			stack.insert(key, size);
 		}
 
 		if self.should_mini_sample(key) {
 			for mini_stack in &mut self.mini_policy_stacks {
-				mini_stack.insert(key);
+				mini_stack.insert(key, size);
 			}
 		}
 
@@ -329,9 +337,10 @@ where
 			for event in buffered_events {
 				match event {
 					StackEvent::Get(key) => stack.update(*key),
-					StackEvent::Set(key) => stack.insert(*key),
+					StackEvent::Set(key, size) => stack.insert(*key, *size),
 					StackEvent::Del(key) => stack.remove(*key),
 					StackEvent::Wipe => stack.clear(),
+					StackEvent::Resize(size) => stack.resize(*size),
 				}
 			}
 
@@ -476,9 +485,10 @@ fn reconstruct_policy_stack(
 
 			match event {
 				StackEvent::Get(key) => stack.update(key),
-				StackEvent::Set(key) => stack.insert(key),
+				StackEvent::Set(key, size) => stack.insert(key, size),
 				StackEvent::Del(key) => stack.remove(key),
 				StackEvent::Wipe => stack.clear(),
+				StackEvent::Resize(size) => stack.resize(size),
 			}
 		}
 
