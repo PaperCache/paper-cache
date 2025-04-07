@@ -95,9 +95,9 @@ fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
 		return Err(CacheError::InvalidPolicy);
 	};
 
-	if k_in < 0.0 || k_in > 1.0
-		|| k_out < 0.0 || k_out > 1.0
-		|| k_in + k_out > 1.0
+	if k_in + k_out > 1.0
+		|| !(0.0..=1.0).contains(&k_in)
+		|| !(0.0..=1.0).contains(&k_out)
 	{
 		return Err(CacheError::InvalidPolicy);
 	}
