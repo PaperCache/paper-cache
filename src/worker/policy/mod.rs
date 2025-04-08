@@ -49,8 +49,7 @@ const MINI_SAMPLING_THRESHOLD: u64 = 16_777;
 // the polling value must be a power of 2
 const RECONSTRUCT_POLICY_POLLING: usize = 1_048_576;
 
-//const AUTO_POLICY_DURATION: Duration = Duration::from_secs(3_600);
-const AUTO_POLICY_DURATION: Duration = Duration::from_secs(5);
+const AUTO_POLICY_DURATION: Duration = Duration::from_secs(3_600);
 const SET_RECENCY_DURATION: Duration = Duration::from_secs(5);
 const SHORT_POLLING_DURATION: Duration = Duration::from_millis(1);
 const LONG_POLLING_DURATION: Duration = Duration::from_secs(1);
