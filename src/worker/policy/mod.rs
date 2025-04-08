@@ -361,6 +361,8 @@ where
 				}
 			}
 
+			info!("Policy switch complete");
+
 			self.policy_stack = Some(stack);
 			self.mini_index = None;
 		}
