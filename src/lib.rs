@@ -164,7 +164,7 @@ where
 			return Err(CacheError::DuplicatePolicies);
 		}
 
-		if !policies.contains(&policy) {
+		if !policy.is_auto() && !policies.contains(&policy) {
 			return Err(CacheError::UnconfiguredPolicy);
 		}
 
@@ -180,7 +180,6 @@ where
 			&objects,
 			&stats,
 			&overhead_manager,
-			policy,
 		)?;
 
 		thread::spawn(move || worker_manager.run());
@@ -586,7 +585,7 @@ where
 	/// assert!(cache.policy(PaperPolicy::Lru).is_err());
 	/// ```
 	pub fn policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		if !self.stats.get_policies().contains(&policy) {
+		if !policy.is_auto() && !self.stats.get_policies().contains(&policy) {
 			return Err(CacheError::UnconfiguredPolicy);
 		}
 

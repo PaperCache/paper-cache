@@ -22,6 +22,10 @@ impl PolicyStack for MruStack {
 		self.stack.len()
 	}
 
+	fn contains(&self, key: HashedKey) -> bool {
+		self.stack.contains(&key)
+	}
+
 	fn insert(&mut self, key: HashedKey, _: ObjectSize) {
 		if self.stack.contains(&key) {
 			return self.update(key);

@@ -22,6 +22,7 @@ pub trait PolicyStack {
 	fn is_policy(&self, policy: &PaperPolicy) -> bool;
 	fn len(&self) -> usize;
 
+	fn contains(&self, key: HashedKey) -> bool;
 	fn insert(&mut self, key: HashedKey, size: ObjectSize);
 	fn update(&mut self, _key: HashedKey) {}
 	fn remove(&mut self, key: HashedKey);
@@ -58,6 +59,16 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.len(),
 			PolicyStackType::Mru(stack) => stack.len(),
 			PolicyStackType::TwoQ(stack) => stack.len(),
+		}
+	}
+
+	fn contains(&self, key: HashedKey) -> bool {
+		match self {
+			PolicyStackType::Lfu(stack) => stack.contains(key),
+			PolicyStackType::Fifo(stack) => stack.contains(key),
+			PolicyStackType::Lru(stack) => stack.contains(key),
+			PolicyStackType::Mru(stack) => stack.contains(key),
+			PolicyStackType::TwoQ(stack) => stack.contains(key),
 		}
 	}
 
@@ -116,6 +127,8 @@ impl PolicyStackType {
 	#[must_use]
 	pub fn new(policy: PaperPolicy, max_size: CacheSize) -> Self {
 		match policy {
+			PaperPolicy::Auto => PolicyStackType::Lfu(Box::default()),
+
 			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
 			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
 			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),

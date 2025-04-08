@@ -50,8 +50,12 @@ impl PolicyStack for TwoQStack {
 			+ self.am.stack.len()
 	}
 
+	fn contains(&self, key: HashedKey) -> bool {
+		self.any_stack_contains(key)
+	}
+
 	fn insert(&mut self, key: HashedKey, size: ObjectSize) {
-		if self.contains(key) {
+		if self.any_stack_contains(key) {
 			self.a1_in.update(key, size);
 			self.a1_out.update(key, size);
 			self.am.update(key, size);
@@ -121,7 +125,7 @@ impl TwoQStack {
 		}
 	}
 
-	fn contains(&self, key: HashedKey) -> bool {
+	fn any_stack_contains(&self, key: HashedKey) -> bool {
 		self.a1_in.stack.contains(&key)
 			|| self.a1_out.stack.contains(&key)
 			|| self.am.stack.contains(&key)

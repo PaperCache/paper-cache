@@ -30,6 +30,10 @@ impl PolicyStack for LfuStack {
 		self.index_map.len()
 	}
 
+	fn contains(&self, key: HashedKey) -> bool {
+		self.index_map.contains_key(&key)
+	}
+
 	fn insert(&mut self, key: HashedKey, _: ObjectSize) {
 		if self.index_map.contains_key(&key) {
 			return self.update(key);

@@ -22,6 +22,8 @@ impl OverheadManager {
 		let policies_overhead_per_object = policies
 			.iter()
 			.map(|policy| match policy {
+				PaperPolicy::Auto => 0,
+
 				// 16 bytes for the HashMap entry 32 bytes for the HashList entry,
 				// 8 bytes for the HashedKey, 4 bytes for the count
 				PaperPolicy::Lfu => 60,

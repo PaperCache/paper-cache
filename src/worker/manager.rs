@@ -7,7 +7,6 @@ use crate::{
 	StatsRef,
 	OverheadManagerRef,
 	error::CacheError,
-	policy::PaperPolicy,
 	worker::{
 		Worker,
 		WorkerSender,
@@ -44,7 +43,6 @@ impl WorkerManager {
 		objects: &ObjectMapRef<K, V>,
 		stats: &StatsRef,
 		overhead_manager: &OverheadManagerRef,
-		policy: PaperPolicy,
 	) -> Result<Self, CacheError>
 	where
 		K: 'static + Eq + TypeSize,
@@ -58,7 +56,6 @@ impl WorkerManager {
 			objects.clone(),
 			stats.clone(),
 			overhead_manager.clone(),
-			policy,
 		)?);
 
 		register_worker(TtlWorker::<K, V>::new(

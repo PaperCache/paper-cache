@@ -1,6 +1,6 @@
 use std::sync::{
 	Arc,
-	atomic::{Ordering, AtomicU64, AtomicUsize},
+	atomic::{Ordering, AtomicBool, AtomicU64, AtomicUsize},
 };
 
 use kwik::time;
@@ -23,6 +23,7 @@ pub struct Stats {
 	total_dels: u64,
 
 	policy: PaperPolicy,
+	is_auto_policy: bool,
 
 	start_time: u64,
 }
@@ -38,6 +39,7 @@ pub struct AtomicStats {
 
 	policies: Arc<[PaperPolicy]>,
 	policy_index: AtomicUsize,
+	is_auto_policy: AtomicBool,
 
 	start_time: AtomicU64,
 }
@@ -90,6 +92,13 @@ impl Stats {
 		self.policy
 	}
 
+	/// Returns `true` if the cache is configured to automatically
+	/// switch eviction policies.
+	#[must_use]
+	pub fn is_auto_policy(&self) -> bool {
+		self.is_auto_policy
+	}
+
 	/// Returns the cache's current uptime.
 	#[must_use]
 	pub fn get_uptime(&self) -> u64 {
@@ -103,9 +112,15 @@ impl AtomicStats {
 	pub fn new(
 		max_size: CacheSize,
 		policies: &[PaperPolicy],
-		policy: PaperPolicy,
+		mut policy: PaperPolicy,
 	) -> Result<Self, CacheError> {
 		let policies: Arc<[PaperPolicy]> = policies.into();
+		let is_auto_policy = policy.is_auto();
+
+		if is_auto_policy {
+			policy = PaperPolicy::Lfu;
+		}
+
 		let policy_index = get_policy_index(&policies, policy)?;
 
 		let stats = AtomicStats {
@@ -119,6 +134,7 @@ impl AtomicStats {
 
 			policies,
 			policy_index: AtomicUsize::new(policy_index),
+			is_auto_policy: AtomicBool::new(is_auto_policy),
 
 			start_time: AtomicU64::new(time::timestamp()),
 		};
@@ -134,6 +150,17 @@ impl AtomicStats {
 	#[must_use]
 	pub fn get_policies(&self) -> &[PaperPolicy] {
 		&self.policies
+	}
+
+	#[must_use]
+	pub fn get_policy(&self) -> PaperPolicy {
+		let policy_index = self.policy_index.load(Ordering::Relaxed);
+		self.policies[policy_index]
+	}
+
+	#[must_use]
+	pub fn is_auto_policy(&self) -> bool {
+		self.is_auto_policy.load(Ordering::Relaxed)
 	}
 
 	pub fn hit(&self) {
@@ -166,8 +193,15 @@ impl AtomicStats {
 	}
 
 	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
+		if policy.is_auto() {
+			self.is_auto_policy.store(true, Ordering::Relaxed);
+			return Ok(());
+		}
+
 		let index = get_policy_index(&self.policies, policy)?;
+
 		self.policy_index.store(index, Ordering::Relaxed);
+		self.is_auto_policy.store(false, Ordering::Relaxed);
 
 		Ok(())
 	}
@@ -198,6 +232,7 @@ impl AtomicStats {
 			total_dels: self.total_dels.load(Ordering::Relaxed),
 
 			policy: self.policies[self.policy_index.load(Ordering::Relaxed)],
+			is_auto_policy: self.is_auto_policy.load(Ordering::Relaxed),
 
 			start_time: self.start_time.load(Ordering::Relaxed),
 		}
