@@ -24,7 +24,7 @@ impl StackEvent {
 		let event = match worker_event {
 			WorkerEvent::Get(key, hit) if *hit => StackEvent::Get(*key),
 			WorkerEvent::Set(key, size, _, _) => StackEvent::Set(*key, *size),
-			WorkerEvent::Del(key, _, _) => StackEvent::Del(*key),
+			WorkerEvent::Del(key, _) => StackEvent::Del(*key),
 			WorkerEvent::Wipe => StackEvent::Wipe,
 			WorkerEvent::Resize(size) => StackEvent::Resize(*size),
 

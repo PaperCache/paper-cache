@@ -6,16 +6,14 @@ use std::sync::{
 use kwik::time;
 
 use crate::{
-	CacheSize,
-	AtomicCacheSize,
-	error::CacheError,
-	policy::PaperPolicy,
+	error::CacheError, object::{overhead::get_policy_overhead, ObjectSize}, policy::PaperPolicy, AtomicCacheSize, CacheSize
 };
 
 #[derive(Debug)]
 pub struct Stats {
 	max_size: CacheSize,
 	used_size: CacheSize,
+	num_objects: u64,
 
 	total_hits: u64,
 	total_gets: u64,
@@ -30,7 +28,8 @@ pub struct Stats {
 
 pub struct AtomicStats {
 	max_size: AtomicCacheSize,
-	used_size: AtomicCacheSize,
+	base_used_size: AtomicCacheSize,
+	num_objects: AtomicU64,
 
 	total_hits: AtomicU64,
 	total_gets: AtomicU64,
@@ -56,6 +55,12 @@ impl Stats {
 	#[must_use]
 	pub fn get_used_size(&self) -> CacheSize {
 		self.used_size
+	}
+
+	/// Returns the number of objects in the cache.
+	#[must_use]
+	pub fn get_num_objects(&self) -> u64 {
+		self.num_objects
 	}
 
 	/// Returns the cache's total number of gets.
@@ -124,8 +129,9 @@ impl AtomicStats {
 		let policy_index = get_policy_index(&policies, policy)?;
 
 		let stats = AtomicStats {
-			max_size: AtomicU64::new(max_size),
-			used_size: AtomicU64::default(),
+			max_size: AtomicCacheSize::new(max_size),
+			base_used_size: AtomicCacheSize::default(),
+			num_objects: AtomicU64::default(),
 
 			total_hits: AtomicU64::default(),
 			total_gets: AtomicU64::default(),
@@ -145,6 +151,15 @@ impl AtomicStats {
 	#[must_use]
 	pub fn get_max_size(&self) -> CacheSize {
 		self.max_size.load(Ordering::Relaxed)
+	}
+
+	#[must_use]
+	pub fn get_used_size(&self, policy: &PaperPolicy) -> CacheSize {
+		let base_used_size = self.base_used_size.load(Ordering::Relaxed);
+		let num_objects = self.num_objects.load(Ordering::Relaxed);
+		let policy_overhead = get_policy_overhead(policy);
+
+		base_used_size + num_objects * policy_overhead as CacheSize
 	}
 
 	#[must_use]
@@ -184,12 +199,20 @@ impl AtomicStats {
 		self.max_size.store(max_size, Ordering::Relaxed);
 	}
 
-	pub fn increase_used_size(&self, size: u64) {
-		self.used_size.fetch_add(size, Ordering::Relaxed);
+	pub fn increase_base_used_size(&self, size: ObjectSize) {
+		self.base_used_size.fetch_add(size.into(), Ordering::Relaxed);
 	}
 
-	pub fn decrease_used_size(&self, size: u64) {
-		self.used_size.fetch_sub(size, Ordering::Relaxed);
+	pub fn decrease_base_used_size(&self, size: ObjectSize) {
+		self.base_used_size.fetch_sub(size.into(), Ordering::Relaxed);
+	}
+
+	pub fn incr_num_objects(&self) {
+		self.num_objects.fetch_add(1, Ordering::Relaxed);
+	}
+
+	pub fn decr_num_objects(&self) {
+		self.num_objects.fetch_sub(1, Ordering::Relaxed);
 	}
 
 	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
@@ -212,7 +235,7 @@ impl AtomicStats {
 	}
 
 	pub fn clear(&self) {
-		self.used_size.store(0, Ordering::Relaxed);
+		self.base_used_size.store(0, Ordering::Relaxed);
 
 		self.total_hits.store(0, Ordering::Relaxed);
 		self.total_gets.store(0, Ordering::Relaxed);
@@ -222,9 +245,12 @@ impl AtomicStats {
 
 	#[must_use]
 	pub fn to_stats(&self) -> Stats {
+		let policy = self.get_policy();
+
 		Stats {
 			max_size: self.get_max_size(),
-			used_size: self.used_size.load(Ordering::Relaxed),
+			used_size: self.get_used_size(&policy),
+			num_objects: self.num_objects.load(Ordering::Relaxed),
 
 			total_hits: self.total_hits.load(Ordering::Relaxed),
 			total_gets: self.total_gets.load(Ordering::Relaxed),

@@ -52,7 +52,7 @@ where
 						self.expiries.insert(key, expiry);
 					},
 
-					WorkerEvent::Del(key, _, expiry) => self.expiries.remove(key, expiry),
+					WorkerEvent::Del(key, expiry) => self.expiries.remove(key, expiry),
 
 					WorkerEvent::Ttl(key, old_expiry, new_expiry) => {
 						self.expiries.remove(key, old_expiry);

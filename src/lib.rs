@@ -170,8 +170,7 @@ where
 
 		let objects = Arc::new(DashMap::with_hasher(NoHasher::default()));
 		let stats = Arc::new(AtomicStats::new(max_size, policies, policy)?);
-
-		let overhead_manager = Arc::new(OverheadManager::new(policies));
+		let overhead_manager = Arc::new(OverheadManager::new(&stats));
 
 		let (worker_sender, worker_listener) = unbounded();
 
@@ -300,14 +299,14 @@ where
 		let hashed_key = self.hash_key(&key);
 
 		let object = Object::new(key, value, ttl);
-		let size = self.overhead_manager.total_size(&object);
+		let base_size = self.overhead_manager.base_size(&object);
 		let expiry = object.expiry();
 
-		if size == 0 {
+		if base_size == 0 {
 			return Err(CacheError::ZeroValueSize);
 		}
 
-		if self.stats.exceeds_max_size(size.into()) {
+		if self.stats.exceeds_max_size(base_size.into()) {
 			return Err(CacheError::ExceedingValueSize);
 		}
 
@@ -316,19 +315,22 @@ where
 		let old_object_info = self.objects
 			.insert(hashed_key, object)
 			.map(|old_object| {
-				let size = self.overhead_manager.total_size(&old_object);
+				let base_size = self.overhead_manager.base_size(&old_object);
 				let expiry = old_object.expiry();
 
-				(size, expiry)
+				(base_size, expiry)
 			});
 
-		self.stats.increase_used_size(size.into());
+		self.stats.increase_base_used_size(base_size);
 
 		if let Some((old_object_size, _)) = old_object_info {
-			self.stats.decrease_used_size(old_object_size.into());
+			self.stats.decrease_base_used_size(old_object_size);
+		} else {
+			// the object is new, so increase the number of objects count
+			self.stats.incr_num_objects();
 		}
 
-		self.broadcast(WorkerEvent::Set(hashed_key, size, expiry, old_object_info))?;
+		self.broadcast(WorkerEvent::Set(hashed_key, base_size, expiry, old_object_info))?;
 
 		Ok(())
 	}
@@ -363,12 +365,7 @@ where
 		)?;
 
 		self.stats.del();
-
-		self.broadcast(WorkerEvent::Del(
-			removed_hashed_key,
-			self.overhead_manager.total_size(&object),
-			object.expiry(),
-		))?;
+		self.broadcast(WorkerEvent::Del(removed_hashed_key, object.expiry()))?;
 
 		Ok(())
 	}
@@ -654,8 +651,10 @@ where
 	};
 
 	let object = entry.remove();
+	let base_size = overhead_manager.base_size(&object);
 
-	stats.decrease_used_size(overhead_manager.total_size(&object).into());
+	stats.decrease_base_used_size(base_size);
+	stats.decr_num_objects();
 
 	match !object.is_expired() {
 		true => Ok((hashed_key, object)),

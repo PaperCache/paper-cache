@@ -25,9 +25,9 @@ use crate::{
 	OverheadManagerRef,
 	EraseKey,
 	erase,
-	object::ObjectSize,
 	error::CacheError,
 	policy::PaperPolicy,
+	object::ObjectSize,
 	worker::{
 		Worker,
 		WorkerEvent,
@@ -61,8 +61,6 @@ pub struct PolicyWorker<K, V> {
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
-	max_cache_size: CacheSize,
-	used_cache_size: CacheSize,
 	policy_stack: Option<PolicyStackType>,
 
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
@@ -102,24 +100,14 @@ where
 				match event {
 					WorkerEvent::Get(key, _) => self.handle_get(key),
 
-					WorkerEvent::Set(key, size, _, old_info) => {
-						self.handle_set(key, size, old_info.map(|(old_size, _)| old_size));
+					WorkerEvent::Set(key, size, _, _) => {
+						self.handle_set(key, size);
 						has_current_set = true;
 					},
 
-					WorkerEvent::Del(key, size, _) => {
-						self.handle_del(key);
-						self.used_cache_size -= size as u64;
-					},
-
-					WorkerEvent::Wipe => {
-						self.handle_wipe();
-						self.used_cache_size = 0;
-					},
-
-					WorkerEvent::Resize(max_cache_size) => {
-						self.handle_resize(max_cache_size);
-					},
+					WorkerEvent::Del(key, _) => self.handle_del(key),
+					WorkerEvent::Wipe => self.handle_wipe(),
+					WorkerEvent::Resize(max_size) => self.handle_resize(max_size),
 
 					WorkerEvent::Policy(policy) => {
 						self.handle_policy(policy, policy_reconstruct_tx.clone());
@@ -198,9 +186,6 @@ where
 			stats,
 			overhead_manager,
 
-			max_cache_size,
-			used_cache_size: 0,
-
 			policy_stack: Some(policy_stack),
 
 			trace_fragments,
@@ -230,12 +215,7 @@ where
 		}
 	}
 
-	fn handle_set(
-		&mut self,
-		key: HashedKey,
-		size: ObjectSize,
-		old_size: Option<ObjectSize>,
-	) {
+	fn handle_set(&mut self, key: HashedKey, size: ObjectSize) {
 		if let Some(stack) = &mut self.policy_stack {
 			stack.insert(key, size);
 		}
@@ -244,12 +224,6 @@ where
 			for mini_stack in &mut self.mini_stacks {
 				mini_stack.insert(key, size);
 			}
-		}
-
-		self.used_cache_size += size as u64;
-
-		if let Some(old_size) = old_size {
-			self.used_cache_size -= old_size as u64;
 		}
 	}
 
@@ -266,8 +240,6 @@ where
 	}
 
 	fn handle_resize(&mut self, size: CacheSize) {
-		self.max_cache_size = size;
-
 		if let Some(stack) = &mut self.policy_stack {
 			stack.resize(size);
 		}
@@ -303,7 +275,7 @@ where
 		self.policy_stack = None;
 		self.mini_index = Some(mini_index);
 
-		let max_cache_size = self.max_cache_size;
+		let max_cache_size = self.stats.get_max_size();
 		let current_policy = self.current_policy.clone();
 		let trace_fragments = self.trace_fragments.clone();
 
@@ -397,12 +369,14 @@ where
 			return Ok(());
 		}
 
-		let stack = self.policy_stack
-			.as_mut()
-			.ok_or(CacheError::Internal)?;
+		let policy = self.current_policy.read();
+		let max_cache_size = self.stats.get_max_size();
 
-		while self.used_cache_size > self.max_cache_size {
-			let maybe_key = stack.pop().map(|key| EraseKey::Hashed(key));
+		while self.stats.get_used_size(&policy) > max_cache_size {
+			let maybe_key = self.policy_stack
+				.as_mut()
+				.ok_or(CacheError::Internal)?
+				.pop().map(|key| EraseKey::Hashed(key));
 
 			let erase_result = erase(
 				&self.objects,
@@ -411,12 +385,9 @@ where
 				maybe_key,
 			);
 
-			let Ok((key, object)) = erase_result else {
+			let Ok((key, _)) = erase_result else {
 				continue;
 			};
-
-			let size = self.overhead_manager.total_size(&object);
-			self.used_cache_size -= size as u64;
 
 			buffered_events.push(StackEvent::Del(key));
 		}
@@ -429,11 +400,13 @@ where
 		mini_index: usize,
 		buffered_events: &mut Vec<StackEvent>,
 	) {
-		let mini_stack = &mut self.mini_stacks[mini_index];
+		let max_cache_size = self.stats.get_max_size();
+		let policy = self.current_policy.read();
 		let mut evictions = Vec::<HashedKey>::new();
 
-		while self.used_cache_size > self.max_cache_size {
-			let maybe_key = mini_stack.pop().map(|key| EraseKey::Hashed(key));
+		while self.stats.get_used_size(&policy) > max_cache_size {
+			let maybe_key = self.mini_stacks[mini_index]
+				.pop().map(|key| EraseKey::Hashed(key));
 
 			let erase_result = erase(
 				&self.objects,
@@ -442,12 +415,9 @@ where
 				maybe_key,
 			);
 
-			let Ok((key, object)) = erase_result else {
+			let Ok((key, _)) = erase_result else {
 				continue;
 			};
-
-			let size = self.overhead_manager.total_size(&object);
-			self.used_cache_size -= size as u64;
 
 			evictions.push(key);
 			buffered_events.push(StackEvent::Del(key));

@@ -20,7 +20,7 @@ pub type WorkerReceiver = Receiver<WorkerEvent>;
 pub enum WorkerEvent {
 	Get(HashedKey, bool),
 	Set(HashedKey, ObjectSize, ExpireTime, Option<(ObjectSize, ExpireTime)>),
-	Del(HashedKey, ObjectSize, ExpireTime),
+	Del(HashedKey, ExpireTime),
 
 	Ttl(HashedKey, ExpireTime, ExpireTime),
 
