@@ -55,26 +55,26 @@ pub fn get_policy_overhead(policy: &PaperPolicy) -> ObjectSize {
 	match policy {
 		PaperPolicy::Auto => 0,
 
-		// 16 bytes for the HashMap entry 32 bytes for the HashList entry,
+		// 24 bytes for the HashMap entry 48 bytes for the HashList entry,
 		// 8 bytes for the HashedKey, 4 bytes for the count
-		PaperPolicy::Lfu => 60,
+		PaperPolicy::Lfu => 24 + 48 + 8 + 4,
 
-		// 32 bytes for the HashList entry, 8 bytes for the HashedKey
-		PaperPolicy::Fifo => 40,
+		// 48 bytes for the HashList entry, 8 bytes for the HashedKey
+		PaperPolicy::Fifo => 48 + 8,
 
-		// 32 bytes for the HashList entry, 8 bytes for the HashedKey
-		PaperPolicy::Lru => 40,
+		// 48 bytes for the HashList entry, 8 bytes for the HashedKey
+		PaperPolicy::Lru => 48 + 8,
 
-		// 32 bytes for the HashList entry, 8 bytes for the HashedKey
-		PaperPolicy::Mru => 40,
+		// 48 bytes for the HashList entry, 8 bytes for the HashedKey
+		PaperPolicy::Mru => 48 + 8,
 
-		// 32 bytes for the HashList entry, 8 bytes for the HashedKey,
+		// 48 bytes for the HashList entry, 8 bytes for the HashedKey,
 		// 4 bytes for the object size
-		PaperPolicy::TwoQ(_, _) => 44,
+		PaperPolicy::TwoQ(_, _) => 48 + 8 + 4,
 	}
 }
 
 fn get_ttl_overhead() -> ObjectSize {
-	// the size of an Instant plus 8 bytes for the key in the BTreeMap
-	mem::size_of::<Instant>() as ObjectSize + 8
+	// the size of an Option<Instant> plus 48 bytes for the BTreeMap entry
+	mem::size_of::<Option<Instant>>() as ObjectSize + 48
 }
