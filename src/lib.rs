@@ -678,11 +678,189 @@ unsafe impl<K, V, S> Send for PaperCache<K, V, S> {}
 
 #[cfg(test)]
 mod tests {
+	use crate::{PaperCache, PaperPolicy, CacheError};
+
+	const TEST_CACHE_MAX_SIZE: u64 = 1000;
+
 	#[test]
-	fn duplicate_policies() {
-		use crate::{PaperPolicy, has_duplicate_policies};
+	fn it_returns_correct_version() {
+		let cache = init_test_cache();
+		assert_eq!(cache.version(), env!("CARGO_PKG_VERSION"));
+	}
+
+	#[test]
+	fn it_returns_stats() {
+		let cache = init_test_cache();
+		let stats = cache.stats();
+
+		assert_eq!(stats.get_max_size(), TEST_CACHE_MAX_SIZE);
+	}
+
+	#[test]
+	fn it_gets_an_existing_object() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.get(&0).as_deref(), Ok(&1));
+	}
+
+	#[test]
+	fn it_does_not_get_a_non_existing_object() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.get(&1), Err(CacheError::KeyNotFound));
+	}
+
+	#[test]
+	fn it_calculates_miss_ratio_correctly() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert!(cache.get(&0).is_ok());
+		assert!(cache.get(&0).is_ok());
+		assert!(cache.get(&0).is_ok());
+		assert!(cache.get(&1).is_err());
+
+		let stats = cache.stats();
+		assert_eq!(stats.get_miss_ratio(), 0.25);
+	}
+
+	#[test]
+	fn it_sets_with_no_ttl() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert!(cache.get(&0).is_ok());
+	}
+
+	#[test]
+	fn it_sets_with_ttl() {
+		use std::{
+			thread,
+			time::Duration,
+		};
+
+		let cache = init_test_cache();
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+
+		assert!(cache.get(&0).is_ok());
+		thread::sleep(Duration::from_secs(2));
+		assert!(cache.get(&0).is_err());
+	}
+
+	#[test]
+	fn it_dels_an_existing_object() {
+		let cache = init_test_cache();
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+
+		assert!(cache.get(&0).is_ok());
+		assert!(cache.del(&0).is_ok());
+		assert!(cache.get(&0).is_err());
+	}
+
+	#[test]
+	fn it_does_not_del_a_non_existing_object() {
+		let cache = init_test_cache();
+		assert_eq!(cache.del(&0), Err(CacheError::KeyNotFound));
+	}
+
+	#[test]
+	fn it_does_not_allow_duplicate_policies() {
+		use crate::has_duplicate_policies;
 
 		assert!(!has_duplicate_policies(&[PaperPolicy::Lfu, PaperPolicy::Lru]));
 		assert!(has_duplicate_policies(&[PaperPolicy::Lfu, PaperPolicy::Lru, PaperPolicy::Lfu]));
+	}
+
+	#[test]
+	fn it_has_an_existing_object() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+		assert!(cache.has(&0));
+	}
+
+	#[test]
+	fn it_does_not_have_a_non_existing_object() {
+		let cache = init_test_cache();
+		assert!(!cache.has(&1));
+	}
+
+	#[test]
+	fn it_peeks_an_existing_object() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.peek(&0).as_deref(), Ok(&1));
+	}
+
+	#[test]
+	fn it_does_not_peek_a_non_existing_object() {
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.peek(&1), Err(CacheError::KeyNotFound));
+	}
+
+	#[test]
+	fn it_sets_an_existing_objects_ttl() {
+		use std::{
+			thread,
+			time::Duration,
+		};
+
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert!(cache.get(&0).is_ok());
+
+		assert!(cache.ttl(&0, Some(1)).is_ok());
+
+		thread::sleep(Duration::from_secs(2));
+		assert_eq!(cache.get(&0), Err(CacheError::KeyNotFound));
+	}
+
+	#[test]
+	fn it_does_not_set_a_non_existing_objects_ttl() {
+		let cache = init_test_cache();
+		assert_eq!(cache.ttl(&0, Some(1)), Err(CacheError::KeyNotFound));
+	}
+
+	#[test]
+	fn it_resets_an_objects_ttl() {
+		use std::{
+			thread,
+			time::Duration,
+		};
+
+		let cache = init_test_cache();
+
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+		assert!(cache.get(&0).is_ok());
+
+		assert!(cache.ttl(&0, Some(5)).is_ok());
+
+		thread::sleep(Duration::from_secs(2));
+		assert!(cache.get(&0).is_ok());
+	}
+
+	#[test]
+	fn it_gets_an_objects_size() {
+		use crate::object::overhead::get_policy_overhead;
+
+		let cache = init_test_cache();
+		let expected = 4 + get_policy_overhead(&PaperPolicy::Lfu);
+
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+		assert_eq!(cache.size(&0), Ok(expected));
+	}
+
+	fn init_test_cache() -> PaperCache<u32, u32> {
+		PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Lfu],
+			PaperPolicy::Lfu,
+		).expect("Could not initialize test cache.")
 	}
 }
