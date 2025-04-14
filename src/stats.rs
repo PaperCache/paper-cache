@@ -6,7 +6,14 @@ use std::sync::{
 use kwik::time;
 
 use crate::{
-	error::CacheError, object::{overhead::get_policy_overhead, ObjectSize}, policy::PaperPolicy, AtomicCacheSize, CacheSize
+	CacheSize,
+	AtomicCacheSize,
+	error::CacheError,
+	policy::PaperPolicy,
+	object::{
+		ObjectSize,
+		overhead::get_policy_overhead,
+	},
 };
 
 #[derive(Debug)]
@@ -178,20 +185,20 @@ impl AtomicStats {
 		self.is_auto_policy.load(Ordering::Relaxed)
 	}
 
-	pub fn hit(&self) {
+	pub fn incr_hits(&self) {
 		self.total_gets.fetch_add(1, Ordering::Relaxed);
 		self.total_hits.fetch_add(1, Ordering::Relaxed);
 	}
 
-	pub fn miss(&self) {
+	pub fn incr_misses(&self) {
 		self.total_gets.fetch_add(1, Ordering::Relaxed);
 	}
 
-	pub fn set(&self) {
+	pub fn incr_sets(&self) {
 		self.total_sets.fetch_add(1, Ordering::Relaxed);
 	}
 
-	pub fn del(&self) {
+	pub fn incr_dels(&self) {
 		self.total_dels.fetch_add(1, Ordering::Relaxed);
 	}
 
@@ -236,6 +243,7 @@ impl AtomicStats {
 
 	pub fn clear(&self) {
 		self.base_used_size.store(0, Ordering::Relaxed);
+		self.num_objects.store(0, Ordering::Relaxed);
 
 		self.total_hits.store(0, Ordering::Relaxed);
 		self.total_gets.store(0, Ordering::Relaxed);
@@ -273,4 +281,45 @@ fn get_policy_index(
 		.iter()
 		.position(|configured_policy| configured_policy.eq(&policy))
 		.ok_or(CacheError::Internal)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::sync::atomic::Ordering;
+
+	use crate::{
+		PaperPolicy,
+		stats::AtomicStats,
+	};
+
+	#[test]
+	fn it_clears_atomic_stats() {
+		let stats = AtomicStats::new(
+			1000,
+			&[PaperPolicy::Lfu],
+			PaperPolicy::Lfu,
+		).expect("Could not initialize atomic stats.");
+
+		stats.increase_base_used_size(1);
+		stats.incr_num_objects();
+		stats.incr_hits();
+		stats.incr_sets();
+		stats.incr_dels();
+
+		assert_eq!(stats.base_used_size.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.num_objects.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.total_dels.load(Ordering::Relaxed), 1);
+
+		stats.clear();
+
+		assert_eq!(stats.base_used_size.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.num_objects.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.total_dels.load(Ordering::Relaxed), 0);
+	}
 }

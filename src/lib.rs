@@ -261,12 +261,12 @@ where
 
 		let result = match self.objects.get(&hashed_key) {
 			Some(object) if object.key_matches(key) && !object.is_expired() => {
-				self.stats.hit();
+				self.stats.incr_hits();
 				Ok(object.data())
 			},
 
 			_ => {
-				self.stats.miss();
+				self.stats.incr_misses();
 				Err(CacheError::KeyNotFound)
 			},
 		};
@@ -310,7 +310,7 @@ where
 			return Err(CacheError::ExceedingValueSize);
 		}
 
-		self.stats.set();
+		self.stats.incr_sets();
 
 		let old_object_info = self.objects
 			.insert(hashed_key, object)
@@ -364,7 +364,7 @@ where
 			Some(EraseKey::Original(key, hashed_key)),
 		)?;
 
-		self.stats.del();
+		self.stats.incr_dels();
 		self.broadcast(WorkerEvent::Del(removed_hashed_key, object.expiry()))?;
 
 		Ok(())
