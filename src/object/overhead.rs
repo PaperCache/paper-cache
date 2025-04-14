@@ -74,7 +74,7 @@ pub fn get_policy_overhead(policy: &PaperPolicy) -> ObjectSize {
 	}
 }
 
-fn get_ttl_overhead() -> ObjectSize {
+pub fn get_ttl_overhead() -> ObjectSize {
 	// the size of an Option<Instant> plus 48 bytes for the BTreeMap entry
 	mem::size_of::<Option<Instant>>() as ObjectSize + 48
 }

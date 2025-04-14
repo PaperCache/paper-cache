@@ -460,8 +460,18 @@ where
 		};
 
 		let old_expiry = object.expiry();
+		let old_base_size = self.overhead_manager.base_size(&object);
+
 		object.expires(ttl);
+
 		let new_expiry = object.expiry();
+		let new_base_size = self.overhead_manager.base_size(&object);
+
+		if new_base_size > old_base_size {
+			self.stats.increase_base_used_size(new_base_size - old_base_size);
+		} else if new_base_size < old_base_size {
+			self.stats.decrease_base_used_size(old_base_size - new_base_size);
+		}
 
 		self.broadcast(WorkerEvent::Ttl(hashed_key, old_expiry, new_expiry))?;
 
@@ -847,13 +857,220 @@ mod tests {
 
 	#[test]
 	fn it_gets_an_objects_size() {
-		use crate::object::overhead::get_policy_overhead;
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::get_policy_overhead,
+		};
 
 		let cache = init_test_cache();
-		let expected = 4 + get_policy_overhead(&PaperPolicy::Lfu);
+
+		let expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu);
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.size(&0), Ok(expected));
+	}
+
+	#[test]
+	fn it_gets_an_expiring_objects_size() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu)
+			+ get_ttl_overhead();
 
 		assert!(cache.set(0, 1, Some(1)).is_ok());
 		assert_eq!(cache.size(&0), Ok(expected));
+	}
+
+	#[test]
+	fn it_gets_an_objects_size_after_policy_switch() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::get_policy_overhead,
+		};
+
+		let cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Lru, PaperPolicy::Lfu],
+			PaperPolicy::Lfu,
+		).expect("Could not initialize test cache.");
+
+		let base_expected = 4 + 4 + mem::size_of::<ExpireTime>() as u32;
+		let lfu_expected = base_expected + get_policy_overhead(&PaperPolicy::Lfu);
+		let lru_expected = base_expected + get_policy_overhead(&PaperPolicy::Lru);
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.size(&0), Ok(lfu_expected));
+
+		assert!(cache.policy(PaperPolicy::Lru).is_ok());
+		assert_eq!(cache.size(&0), Ok(lru_expected));
+	}
+
+	#[test]
+	fn it_gets_an_objects_size_after_set_ttl() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let pre_expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu);
+
+		let post_expected = pre_expected + get_ttl_overhead();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert_eq!(cache.size(&0), Ok(pre_expected));
+
+		assert!(cache.ttl(&0, Some(1)).is_ok());
+		assert_eq!(cache.size(&0), Ok(post_expected));
+	}
+
+	#[test]
+	fn it_gets_an_objects_size_after_unset_ttl() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let pre_expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu)
+			+ get_ttl_overhead();
+
+		let post_expected = pre_expected - get_ttl_overhead();
+
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+		assert_eq!(cache.size(&0), Ok(pre_expected));
+
+		assert!(cache.ttl(&0, None).is_ok());
+		assert_eq!(cache.size(&0), Ok(post_expected));
+	}
+
+	#[test]
+	fn stats_show_correct_used_size() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let expected = (4 + 4) * 2
+			+ mem::size_of::<ExpireTime>() as u32 * 2
+			+ get_policy_overhead(&PaperPolicy::Lfu) * 2
+			+ get_ttl_overhead();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		assert!(cache.set(1, 1, Some(1)).is_ok());
+
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), expected as u64);
+	}
+
+	#[test]
+	fn stats_show_correct_used_size_after_policy_switch() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::get_policy_overhead,
+		};
+
+		let cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Lru, PaperPolicy::Lfu],
+			PaperPolicy::Lfu,
+		).expect("Could not initialize test cache.");
+
+		let base_expected = 4 + 4 + mem::size_of::<ExpireTime>() as u32;
+		let lfu_expected = base_expected + get_policy_overhead(&PaperPolicy::Lfu);
+		let lru_expected = base_expected + get_policy_overhead(&PaperPolicy::Lru);
+
+		assert!(cache.set(0, 1, None).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), lfu_expected as u64);
+
+		assert!(cache.policy(PaperPolicy::Lru).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), lru_expected as u64);
+	}
+
+	#[test]
+	fn stats_show_correct_used_size_after_set_ttl() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let pre_expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu);
+
+		let post_expected = pre_expected + get_ttl_overhead();
+
+		assert!(cache.set(0, 1, None).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), pre_expected as u64);
+
+		assert!(cache.ttl(&0, Some(1)).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), post_expected as u64);
+	}
+
+	#[test]
+	fn stats_show_correct_used_size_after_unset_ttl() {
+		use std::mem;
+
+		use crate::object::{
+			ExpireTime,
+			overhead::{get_policy_overhead, get_ttl_overhead},
+		};
+
+		let cache = init_test_cache();
+
+		let pre_expected = 4 + 4
+			+ mem::size_of::<ExpireTime>() as u32
+			+ get_policy_overhead(&PaperPolicy::Lfu)
+			+ get_ttl_overhead();
+
+		let post_expected = pre_expected - get_ttl_overhead();
+
+		assert!(cache.set(0, 1, Some(1)).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), pre_expected as u64);
+
+		assert!(cache.ttl(&0, None).is_ok());
+		let stats = cache.stats();
+		assert_eq!(stats.get_used_size(), post_expected as u64);
 	}
 
 	fn init_test_cache() -> PaperCache<u32, u32> {
