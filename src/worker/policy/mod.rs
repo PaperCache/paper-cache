@@ -11,6 +11,7 @@ use std::{
 	collections::VecDeque,
 };
 
+use rayon::prelude::*;
 use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::{Sender, Receiver, unbounded};
@@ -209,9 +210,9 @@ where
 		}
 
 		if self.should_mini_sample(key) {
-			for mini_stack in &mut self.mini_stacks {
-				mini_stack.update_with_count(key);
-			}
+			self.mini_stacks
+				.par_iter_mut()
+				.for_each(|mini_stack| mini_stack.update_with_count(key));
 		}
 	}
 
@@ -221,9 +222,9 @@ where
 		}
 
 		if self.should_mini_sample(key) {
-			for mini_stack in &mut self.mini_stacks {
-				mini_stack.insert(key, size);
-			}
+			self.mini_stacks
+				.par_iter_mut()
+				.for_each(|mini_stack| mini_stack.insert(key, size));
 		}
 	}
 
@@ -233,9 +234,9 @@ where
 		}
 
 		if self.should_mini_sample(key) {
-			for mini_stack in &mut self.mini_stacks {
-				mini_stack.remove(key);
-			}
+			self.mini_stacks
+				.par_iter_mut()
+				.for_each(|mini_stack| mini_stack.remove(key));
 		}
 	}
 
@@ -246,9 +247,9 @@ where
 
 		let mini_size = get_mini_stack_size(size);
 
-		for mini_stack in &mut self.mini_stacks {
-			mini_stack.resize(mini_size);
-		}
+		self.mini_stacks
+			.par_iter_mut()
+			.for_each(|mini_stack| mini_stack.resize(mini_size));
 	}
 
 	fn handle_policy(
@@ -311,9 +312,9 @@ where
 			stack.clear();
 		}
 
-		for mini_stack in &mut self.mini_stacks {
-			mini_stack.clear();
-		}
+		self.mini_stacks
+			.par_iter_mut()
+			.for_each(|mini_stack| mini_stack.clear());
 	}
 
 	fn apply_buffered_events(
@@ -424,11 +425,11 @@ where
 		}
 
 		for key in &evictions {
-			for (index, mini_stack) in self.mini_stacks.iter_mut().enumerate() {
-				if index != mini_index {
-					mini_stack.remove(*key);
-				}
-			}
+			self.mini_stacks
+				.par_iter_mut()
+				.enumerate()
+				.filter(|(index, _)| *index != mini_index)
+				.for_each(|(_, mini_stack)| mini_stack.remove(*key));
 		}
 	}
 
