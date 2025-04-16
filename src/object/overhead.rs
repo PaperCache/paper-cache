@@ -62,6 +62,10 @@ pub fn get_policy_overhead(policy: &PaperPolicy) -> ObjectSize {
 		// 48 bytes for the HashList entry, 8 bytes for the HashedKey
 		PaperPolicy::Fifo => 48 + 8,
 
+		// 48 bytes for the HashList entry, 8 bytes for the HashedKey,
+		// 1 byte for the visited flag
+		PaperPolicy::Clock => 48 + 8 + 1,
+
 		// 48 bytes for the HashList entry, 8 bytes for the HashedKey
 		PaperPolicy::Lru => 48 + 8,
 
