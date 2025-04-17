@@ -4,6 +4,7 @@ mod clock_stack;
 mod lru_stack;
 mod mru_stack;
 mod two_q_stack;
+mod s_three_fifo_stack;
 
 use crate::{
 	CacheSize,
@@ -17,6 +18,7 @@ use crate::{
 		lru_stack::LruStack,
 		mru_stack::MruStack,
 		two_q_stack::TwoQStack,
+		s_three_fifo_stack::SThreeFifoStack,
 	},
 };
 
@@ -42,6 +44,7 @@ pub enum PolicyStackType {
 	Lru(Box<LruStack>),
 	Mru(Box<MruStack>),
 	TwoQ(Box<TwoQStack>),
+	SThreeFifo(Box<SThreeFifoStack>),
 }
 
 impl PolicyStack for PolicyStackType {
@@ -53,6 +56,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.is_policy(policy),
 			PolicyStackType::Mru(stack) => stack.is_policy(policy),
 			PolicyStackType::TwoQ(stack) => stack.is_policy(policy),
+			PolicyStackType::SThreeFifo(stack) => stack.is_policy(policy),
 		}
 	}
 
@@ -64,6 +68,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.len(),
 			PolicyStackType::Mru(stack) => stack.len(),
 			PolicyStackType::TwoQ(stack) => stack.len(),
+			PolicyStackType::SThreeFifo(stack) => stack.len(),
 		}
 	}
 
@@ -75,6 +80,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.contains(key),
 			PolicyStackType::Mru(stack) => stack.contains(key),
 			PolicyStackType::TwoQ(stack) => stack.contains(key),
+			PolicyStackType::SThreeFifo(stack) => stack.contains(key),
 		}
 	}
 
@@ -86,6 +92,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.insert(key, size),
 			PolicyStackType::Mru(stack) => stack.insert(key, size),
 			PolicyStackType::TwoQ(stack) => stack.insert(key, size),
+			PolicyStackType::SThreeFifo(stack) => stack.insert(key, size),
 		}
 	}
 
@@ -97,6 +104,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.update(key),
 			PolicyStackType::Mru(stack) => stack.update(key),
 			PolicyStackType::TwoQ(stack) => stack.update(key),
+			PolicyStackType::SThreeFifo(stack) => stack.update(key),
 		}
 	}
 
@@ -108,6 +116,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.remove(key),
 			PolicyStackType::Mru(stack) => stack.remove(key),
 			PolicyStackType::TwoQ(stack) => stack.remove(key),
+			PolicyStackType::SThreeFifo(stack) => stack.remove(key),
 		}
 	}
 
@@ -119,6 +128,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.clear(),
 			PolicyStackType::Mru(stack) => stack.clear(),
 			PolicyStackType::TwoQ(stack) => stack.clear(),
+			PolicyStackType::SThreeFifo(stack) => stack.clear(),
 		}
 	}
 
@@ -130,6 +140,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lru(stack) => stack.pop(),
 			PolicyStackType::Mru(stack) => stack.pop(),
 			PolicyStackType::TwoQ(stack) => stack.pop(),
+			PolicyStackType::SThreeFifo(stack) => stack.pop(),
 		}
 	}
 }
@@ -149,6 +160,11 @@ impl PolicyStackType {
 			PaperPolicy::TwoQ(k_in, k_out) => {
 				let stack = TwoQStack::new(k_in, k_out, max_size);
 				PolicyStackType::TwoQ(Box::new(stack))
+			},
+
+			PaperPolicy::SThreeFifo(ratio) => {
+				let stack = SThreeFifoStack::new(ratio, max_size);
+				PolicyStackType::SThreeFifo(Box::new(stack))
 			},
 		}
 	}

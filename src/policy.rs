@@ -19,6 +19,7 @@ pub enum PaperPolicy {
 	Lru,
 	Mru,
 	TwoQ(f64, f64),
+	SThreeFifo(f64),
 }
 
 impl PaperPolicy {
@@ -37,6 +38,7 @@ impl Display for PaperPolicy {
 			PaperPolicy::Lru => write!(f, "lru"),
 			PaperPolicy::Mru => write!(f, "mru"),
 			PaperPolicy::TwoQ(k_in, k_out) => write!(f, "2q-{k_in}-{k_out}"),
+			PaperPolicy::SThreeFifo(ratio) => write!(f, "s3-fifo-{ratio}"),
 		}
 	}
 }
@@ -55,6 +57,7 @@ impl FromStr for PaperPolicy {
 			"mru" => PaperPolicy::Mru,
 
 			value if value.starts_with("2q-") => parse_two_q(value)?,
+			value if value.starts_with("s3-fifo-") => parse_s_three_fifo(value)?,
 
 			_ => return Err(CacheError::InvalidPolicy),
 		};
@@ -116,4 +119,25 @@ fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
 	}
 
 	Ok(PaperPolicy::TwoQ(k_in, k_out))
+}
+
+fn parse_s_three_fifo(value: &str) -> Result<PaperPolicy, CacheError> {
+	// skip the "s3-fifo-"
+	let tokens = value[8..]
+		.split('-')
+		.collect::<Vec<&str>>();
+
+	if tokens.len() != 1 {
+		return Err(CacheError::InvalidPolicy);
+	}
+
+	let Ok(ratio) = tokens[0].parse::<f64>() else {
+		return Err(CacheError::InvalidPolicy);
+	};
+
+	if !(0.0..=1.0).contains(&ratio) {
+		return Err(CacheError::InvalidPolicy);
+	}
+
+	Ok(PaperPolicy::SThreeFifo(ratio))
 }
