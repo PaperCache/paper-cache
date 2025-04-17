@@ -14,8 +14,9 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct ClockStack {
+pub struct SieveStack {
 	stack: HashList<Object, NoHasher>,
+	hand: Option<HashedKey>,
 }
 
 struct Object {
@@ -23,9 +24,9 @@ struct Object {
 	visited: bool,
 }
 
-impl PolicyStack for ClockStack {
+impl PolicyStack for SieveStack {
 	fn is_policy(&self, policy: &PaperPolicy) -> bool {
-		matches!(policy, PaperPolicy::Clock)
+		matches!(policy, PaperPolicy::Sieve)
 	}
 
 	fn len(&self) -> usize {
@@ -60,14 +61,26 @@ impl PolicyStack for ClockStack {
 
 	fn pop(&mut self) -> Option<HashedKey> {
 		loop {
-			let mut object = self.stack.pop_back()?;
+			let key = self.hand.or_else(||
+				self.stack
+					.back()
+					.map(|object| object.key)
+			)?;
+
+			self.hand = self.stack
+				.before(&key)
+				.map(|object| object.key);
+
+			let object = self.stack.get(&key)?;
 
 			if !object.visited {
-				return Some(object.key);
+				self.stack.remove(&key);
+				return Some(key);
 			}
 
-			object.visited = false;
-			self.stack.push_front(object);
+			self.stack.update(&key, |object| {
+				object.visited = false;
+			});
 		}
 	}
 }
@@ -108,9 +121,9 @@ impl Eq for Object {}
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, ClockStack};
+		use crate::worker::policy::policy_stack::{PolicyStack, SieveStack};
 
-		let mut stack = ClockStack::default();
+		let mut stack = SieveStack::default();
 
 		for access in [0, 1, 0, 2] {
 			stack.insert(access, 1);
@@ -122,7 +135,7 @@ mod tests {
 			stack.insert(access, 1);
 		}
 
-		for eviction in [2, 1, 0, 3] {
+		for eviction in [2, 1, 3, 0] {
 			assert_eq!(stack.pop(), Some(eviction));
 		}
 

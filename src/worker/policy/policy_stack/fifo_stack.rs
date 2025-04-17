@@ -51,31 +51,17 @@ impl PolicyStack for FifoStack {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::{
-			HashedKey,
-			worker::policy::policy_stack::{PolicyStack, FifoStack},
-		};
-
-		let accesses: Vec<HashedKey> = vec![0, 1, 1, 1, 0, 2, 3, 0, 2, 0];
-		let mut evictions: Vec<HashedKey> = vec![3, 2, 1, 0];
-
+		use crate::worker::policy::policy_stack::{PolicyStack, FifoStack};
 		let mut stack = FifoStack::default();
 
-		for access in accesses {
+		for access in [0, 1, 1, 1, 0, 2, 3, 0, 2, 0] {
 			stack.insert(access, 1);
 		}
 
-		let mut eviction_count = 0;
-
-		while let Some(key) = stack.pop() {
-			match evictions.pop() {
-				Some(eviction) => assert_eq!(key, eviction),
-				None => unreachable!(),
-			}
-
-			eviction_count += 1;
+		for eviction in [0, 1, 2, 3] {
+			assert_eq!(stack.pop(), Some(eviction));
 		}
 
-		assert_eq!(eviction_count, 4);
+		assert_eq!(stack.pop(), None);
 	}
 }

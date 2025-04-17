@@ -16,6 +16,7 @@ pub enum PaperPolicy {
 	Lfu,
 	Fifo,
 	Clock,
+	Sieve,
 	Lru,
 	Mru,
 	TwoQ(f64, f64),
@@ -35,6 +36,7 @@ impl Display for PaperPolicy {
 			PaperPolicy::Lfu => write!(f, "lfu"),
 			PaperPolicy::Fifo => write!(f, "fifo"),
 			PaperPolicy::Clock => write!(f, "clock"),
+			PaperPolicy::Sieve => write!(f, "sieve"),
 			PaperPolicy::Lru => write!(f, "lru"),
 			PaperPolicy::Mru => write!(f, "mru"),
 			PaperPolicy::TwoQ(k_in, k_out) => write!(f, "2q-{k_in}-{k_out}"),
@@ -53,6 +55,7 @@ impl FromStr for PaperPolicy {
 			"lfu" => PaperPolicy::Lfu,
 			"fifo" => PaperPolicy::Fifo,
 			"clock" => PaperPolicy::Clock,
+			"sieve" => PaperPolicy::Sieve,
 			"lru" => PaperPolicy::Lru,
 			"mru" => PaperPolicy::Mru,
 

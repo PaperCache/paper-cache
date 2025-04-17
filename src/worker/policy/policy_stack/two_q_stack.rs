@@ -232,31 +232,18 @@ impl Eq for Object {}
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::{
-			HashedKey,
-			worker::policy::policy_stack::{PolicyStack, TwoQStack},
-		};
-
-		let accesses: Vec<HashedKey> = vec![0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0];
-		let mut evictions: Vec<HashedKey> = vec![0, 2, 1, 5, 4, 3];
+		use crate::worker::policy::policy_stack::{PolicyStack, TwoQStack};
 
 		let mut stack = TwoQStack::new(0.25, 0.5, 4);
 
-		for access in accesses {
+		for access in [0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0] {
 			stack.insert(access, 1);
 		}
 
-		let mut eviction_count = 0;
-
-		while let Some(key) = stack.pop() {
-			match evictions.pop() {
-				Some(eviction) => assert_eq!(key, eviction),
-				None => unreachable!(),
-			}
-
-			eviction_count += 1;
+		for eviction in [3, 4, 5, 1, 2, 0] {
+			assert_eq!(stack.pop(), Some(eviction));
 		}
 
-		assert_eq!(eviction_count, 6);
+		assert_eq!(stack.pop(), None);
 	}
 }

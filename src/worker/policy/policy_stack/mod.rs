@@ -1,6 +1,7 @@
 mod lfu_stack;
 mod fifo_stack;
 mod clock_stack;
+mod sieve_stack;
 mod lru_stack;
 mod mru_stack;
 mod two_q_stack;
@@ -15,6 +16,7 @@ use crate::{
 		lfu_stack::LfuStack,
 		fifo_stack::FifoStack,
 		clock_stack::ClockStack,
+		sieve_stack::SieveStack,
 		lru_stack::LruStack,
 		mru_stack::MruStack,
 		two_q_stack::TwoQStack,
@@ -41,6 +43,7 @@ pub enum PolicyStackType {
 	Lfu(Box<LfuStack>),
 	Fifo(Box<FifoStack>),
 	Clock(Box<ClockStack>),
+	Sieve(Box<SieveStack>),
 	Lru(Box<LruStack>),
 	Mru(Box<MruStack>),
 	TwoQ(Box<TwoQStack>),
@@ -53,6 +56,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.is_policy(policy),
 			PolicyStackType::Fifo(stack) => stack.is_policy(policy),
 			PolicyStackType::Clock(stack) => stack.is_policy(policy),
+			PolicyStackType::Sieve(stack) => stack.is_policy(policy),
 			PolicyStackType::Lru(stack) => stack.is_policy(policy),
 			PolicyStackType::Mru(stack) => stack.is_policy(policy),
 			PolicyStackType::TwoQ(stack) => stack.is_policy(policy),
@@ -65,6 +69,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.len(),
 			PolicyStackType::Fifo(stack) => stack.len(),
 			PolicyStackType::Clock(stack) => stack.len(),
+			PolicyStackType::Sieve(stack) => stack.len(),
 			PolicyStackType::Lru(stack) => stack.len(),
 			PolicyStackType::Mru(stack) => stack.len(),
 			PolicyStackType::TwoQ(stack) => stack.len(),
@@ -77,6 +82,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.contains(key),
 			PolicyStackType::Fifo(stack) => stack.contains(key),
 			PolicyStackType::Clock(stack) => stack.contains(key),
+			PolicyStackType::Sieve(stack) => stack.contains(key),
 			PolicyStackType::Lru(stack) => stack.contains(key),
 			PolicyStackType::Mru(stack) => stack.contains(key),
 			PolicyStackType::TwoQ(stack) => stack.contains(key),
@@ -89,6 +95,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.insert(key, size),
 			PolicyStackType::Fifo(stack) => stack.insert(key, size),
 			PolicyStackType::Clock(stack) => stack.insert(key, size),
+			PolicyStackType::Sieve(stack) => stack.insert(key, size),
 			PolicyStackType::Lru(stack) => stack.insert(key, size),
 			PolicyStackType::Mru(stack) => stack.insert(key, size),
 			PolicyStackType::TwoQ(stack) => stack.insert(key, size),
@@ -101,6 +108,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.update(key),
 			PolicyStackType::Fifo(stack) => stack.update(key),
 			PolicyStackType::Clock(stack) => stack.update(key),
+			PolicyStackType::Sieve(stack) => stack.update(key),
 			PolicyStackType::Lru(stack) => stack.update(key),
 			PolicyStackType::Mru(stack) => stack.update(key),
 			PolicyStackType::TwoQ(stack) => stack.update(key),
@@ -113,6 +121,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.remove(key),
 			PolicyStackType::Fifo(stack) => stack.remove(key),
 			PolicyStackType::Clock(stack) => stack.remove(key),
+			PolicyStackType::Sieve(stack) => stack.remove(key),
 			PolicyStackType::Lru(stack) => stack.remove(key),
 			PolicyStackType::Mru(stack) => stack.remove(key),
 			PolicyStackType::TwoQ(stack) => stack.remove(key),
@@ -125,6 +134,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.clear(),
 			PolicyStackType::Fifo(stack) => stack.clear(),
 			PolicyStackType::Clock(stack) => stack.clear(),
+			PolicyStackType::Sieve(stack) => stack.clear(),
 			PolicyStackType::Lru(stack) => stack.clear(),
 			PolicyStackType::Mru(stack) => stack.clear(),
 			PolicyStackType::TwoQ(stack) => stack.clear(),
@@ -137,6 +147,7 @@ impl PolicyStack for PolicyStackType {
 			PolicyStackType::Lfu(stack) => stack.pop(),
 			PolicyStackType::Fifo(stack) => stack.pop(),
 			PolicyStackType::Clock(stack) => stack.pop(),
+			PolicyStackType::Sieve(stack) => stack.pop(),
 			PolicyStackType::Lru(stack) => stack.pop(),
 			PolicyStackType::Mru(stack) => stack.pop(),
 			PolicyStackType::TwoQ(stack) => stack.pop(),
@@ -154,6 +165,7 @@ impl PolicyStackType {
 			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
 			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
 			PaperPolicy::Clock => PolicyStackType::Clock(Box::default()),
+			PaperPolicy::Sieve => PolicyStackType::Sieve(Box::default()),
 			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),
 			PaperPolicy::Mru => PolicyStackType::Mru(Box::default()),
 
