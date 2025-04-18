@@ -236,6 +236,17 @@ impl AtomicStats {
 		Ok(())
 	}
 
+	pub fn set_auto_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
+		if policy.is_auto() {
+			return Err(CacheError::Internal);
+		}
+
+		let index = get_policy_index(&self.policies, policy)?;
+		self.policy_index.store(index, Ordering::Relaxed);
+
+		Ok(())
+	}
+
 	#[must_use]
 	pub fn exceeds_max_size(&self, size: u64) -> bool {
 		size > self.max_size.load(Ordering::Relaxed)

@@ -135,6 +135,7 @@ where
 			let now = Instant::now();
 
 			if let Some(policy) = self.perform_auto_policy(now, has_current_set) {
+				self.stats.set_auto_policy(policy)?;
 				self.handle_policy(policy, policy_reconstruct_tx.clone());
 			}
 
