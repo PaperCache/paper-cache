@@ -27,6 +27,7 @@ pub struct Stats {
 	total_sets: u64,
 	total_dels: u64,
 
+	policies: Arc<[PaperPolicy]>,
 	policy: PaperPolicy,
 	is_auto_policy: bool,
 
@@ -96,6 +97,12 @@ impl Stats {
 		}
 
 		1.0 - self.total_hits as f64 / self.total_gets as f64
+	}
+
+	/// Returns the cache's configured eviction policies.
+	#[must_use]
+	pub fn get_policies(&self) -> &[PaperPolicy] {
+		&self.policies
 	}
 
 	/// Returns the cache's current eviction policy.
@@ -276,6 +283,7 @@ impl AtomicStats {
 			total_sets: self.total_sets.load(Ordering::Relaxed),
 			total_dels: self.total_dels.load(Ordering::Relaxed),
 
+			policies: self.policies.clone(),
 			policy: self.policies[self.policy_index.load(Ordering::Relaxed)],
 			is_auto_policy: self.is_auto_policy.load(Ordering::Relaxed),
 

@@ -82,7 +82,6 @@ impl PolicyStack for LfuStack {
 		count_stack.push(key);
 
 		let count_stack_index = self.count_stacks.insert_after(prev_count_stack_index, count_stack);
-
 		self.index_map.insert(key, count_stack_index);
 
 		if prev_is_empty {
