@@ -1,4 +1,4 @@
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::HashMap;
 
 use crate::{
 	CacheSize,
@@ -86,12 +86,13 @@ impl PolicyStack for MiniStack {
 	}
 
 	fn insert(&mut self, key: HashedKey, size: ObjectSize) {
-		if let Entry::Vacant(entry) = self.sizes.entry(key) {
-			self.used_size += size as CacheSize;
-			entry.insert(size);
+		self.reduce(self.max_size - size as CacheSize);
+
+		if let Some(old_size) = self.sizes.insert(key, size) {
+			self.used_size -= old_size as CacheSize;
 		}
 
-		self.reduce(self.max_size - size as CacheSize);
+		self.used_size += size as CacheSize;
 		self.stack.insert(key, size);
 	}
 
@@ -101,7 +102,10 @@ impl PolicyStack for MiniStack {
 
 	fn remove(&mut self, key: HashedKey) {
 		self.stack.remove(key);
-		self.sizes.remove(&key);
+
+		if let Some(size) = self.sizes.remove(&key) {
+			self.used_size -= size as CacheSize;
+		}
 	}
 
 	fn resize(&mut self, size: CacheSize) {
@@ -130,5 +134,57 @@ impl PolicyStack for MiniStack {
 		}
 
 		maybe_key
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn used_size_after_reinsert_is_correct() {
+		use crate::{
+			PaperPolicy,
+			worker::policy::{
+				policy_stack::PolicyStack,
+				mini_stack::MiniStack,
+			},
+		};
+
+		let mut mini_stack = MiniStack::new(PaperPolicy::Lfu, 100);
+		assert_eq!(mini_stack.used_size, 0);
+
+		mini_stack.insert(0, 5);
+		assert_eq!(mini_stack.used_size, 5);
+
+		mini_stack.insert(1, 2);
+		assert_eq!(mini_stack.used_size, 7);
+
+		mini_stack.insert(0, 4);
+		assert_eq!(mini_stack.used_size, 6);
+
+		mini_stack.insert(0, 6);
+		assert_eq!(mini_stack.used_size, 8);
+	}
+
+	#[test]
+	fn used_size_after_remove_is_correct() {
+		use crate::{
+			PaperPolicy,
+			worker::policy::{
+				policy_stack::PolicyStack,
+				mini_stack::MiniStack,
+			},
+		};
+
+		let mut mini_stack = MiniStack::new(PaperPolicy::Lfu, 100);
+		assert_eq!(mini_stack.used_size, 0);
+
+		mini_stack.insert(0, 5);
+		assert_eq!(mini_stack.used_size, 5);
+
+		mini_stack.insert(1, 2);
+		assert_eq!(mini_stack.used_size, 7);
+
+		mini_stack.remove(0);
+		assert_eq!(mini_stack.used_size, 2);
 	}
 }
