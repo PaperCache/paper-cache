@@ -27,7 +27,11 @@ use typesize::TypeSize;
 use nohash_hasher::NoHashHasher;
 use crossbeam_channel::unbounded;
 use log::info;
-use kwik::fmt;
+
+use kwik::{
+	fmt,
+	math::set::Multiset,
+};
 
 use crate::{
 	stats::{AtomicStats, Stats},
@@ -160,7 +164,15 @@ where
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		if has_duplicate_policies(policies) {
+		if policies.is_empty() {
+			return Err(CacheError::EmptyPolicies);
+		}
+
+		if policies.contains(&PaperPolicy::Auto) {
+			return Err(CacheError::ConfiguredAutoPolicy);
+		}
+
+		if policies.iter().is_multiset() {
 			return Err(CacheError::DuplicatePolicies);
 		}
 
@@ -672,18 +684,6 @@ where
 	}
 }
 
-fn has_duplicate_policies(policies: &[PaperPolicy]) -> bool {
-	policies
-		.iter()
-		.enumerate()
-		.any(|(index, policy)| {
-			policies
-				.iter()
-				.skip(index + 1)
-				.any(|other| policy.eq(other))
-		})
-}
-
 unsafe impl<K, V, S> Send for PaperCache<K, V, S> {}
 
 #[cfg(test)]
@@ -776,11 +776,60 @@ mod tests {
 	}
 
 	#[test]
-	fn it_does_not_allow_duplicate_policies() {
-		use crate::has_duplicate_policies;
+	fn it_does_not_allow_empty_policies() {
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[],
+			PaperPolicy::Lfu,
+		);
 
-		assert!(!has_duplicate_policies(&[PaperPolicy::Lfu, PaperPolicy::Lru]));
-		assert!(has_duplicate_policies(&[PaperPolicy::Lfu, PaperPolicy::Lru, PaperPolicy::Lfu]));
+		assert!(try_cache.is_err_and(|err| err == CacheError::EmptyPolicies));
+
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[],
+			PaperPolicy::Auto,
+		);
+
+		assert!(try_cache.is_err_and(|err| err == CacheError::EmptyPolicies));
+	}
+
+	#[test]
+	fn it_does_not_allow_auto_policy_in_configured_policies() {
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Auto],
+			PaperPolicy::Auto,
+		);
+
+		assert!(try_cache.is_err_and(|err| err == CacheError::ConfiguredAutoPolicy));
+
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Auto, PaperPolicy::Lru],
+			PaperPolicy::Auto,
+		);
+
+		assert!(try_cache.is_err_and(|err| err == CacheError::ConfiguredAutoPolicy));
+	}
+
+	#[test]
+	fn it_does_not_allow_duplicate_policies() {
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Lfu, PaperPolicy::Lru, PaperPolicy::Lfu],
+			PaperPolicy::Lfu,
+		);
+
+		assert!(try_cache.is_err_and(|err| err == CacheError::DuplicatePolicies));
+
+		let try_cache = PaperCache::<u32, u32>::new(
+			TEST_CACHE_MAX_SIZE,
+			&[PaperPolicy::Lfu, PaperPolicy::Lru],
+			PaperPolicy::Lfu,
+		);
+
+		assert!(try_cache.is_ok());
 	}
 
 	#[test]
