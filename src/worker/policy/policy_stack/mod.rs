@@ -24,7 +24,10 @@ use crate::{
 	},
 };
 
-pub trait PolicyStack {
+pub trait PolicyStack
+where
+	Self: Send,
+{
 	fn is_policy(&self, policy: &PaperPolicy) -> bool;
 	fn len(&self) -> usize;
 
@@ -39,145 +42,16 @@ pub trait PolicyStack {
 	fn pop(&mut self) -> Option<HashedKey>;
 }
 
-pub enum PolicyStackType {
-	Lfu(Box<LfuStack>),
-	Fifo(Box<FifoStack>),
-	Clock(Box<ClockStack>),
-	Sieve(Box<SieveStack>),
-	Lru(Box<LruStack>),
-	Mru(Box<MruStack>),
-	TwoQ(Box<TwoQStack>),
-	SThreeFifo(Box<SThreeFifoStack>),
-}
-
-impl PolicyStack for PolicyStackType {
-	fn is_policy(&self, policy: &PaperPolicy) -> bool {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.is_policy(policy),
-			PolicyStackType::Fifo(stack) => stack.is_policy(policy),
-			PolicyStackType::Clock(stack) => stack.is_policy(policy),
-			PolicyStackType::Sieve(stack) => stack.is_policy(policy),
-			PolicyStackType::Lru(stack) => stack.is_policy(policy),
-			PolicyStackType::Mru(stack) => stack.is_policy(policy),
-			PolicyStackType::TwoQ(stack) => stack.is_policy(policy),
-			PolicyStackType::SThreeFifo(stack) => stack.is_policy(policy),
-		}
-	}
-
-	fn len(&self) -> usize {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.len(),
-			PolicyStackType::Fifo(stack) => stack.len(),
-			PolicyStackType::Clock(stack) => stack.len(),
-			PolicyStackType::Sieve(stack) => stack.len(),
-			PolicyStackType::Lru(stack) => stack.len(),
-			PolicyStackType::Mru(stack) => stack.len(),
-			PolicyStackType::TwoQ(stack) => stack.len(),
-			PolicyStackType::SThreeFifo(stack) => stack.len(),
-		}
-	}
-
-	fn contains(&self, key: HashedKey) -> bool {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.contains(key),
-			PolicyStackType::Fifo(stack) => stack.contains(key),
-			PolicyStackType::Clock(stack) => stack.contains(key),
-			PolicyStackType::Sieve(stack) => stack.contains(key),
-			PolicyStackType::Lru(stack) => stack.contains(key),
-			PolicyStackType::Mru(stack) => stack.contains(key),
-			PolicyStackType::TwoQ(stack) => stack.contains(key),
-			PolicyStackType::SThreeFifo(stack) => stack.contains(key),
-		}
-	}
-
-	fn insert(&mut self, key: HashedKey, size: ObjectSize) {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.insert(key, size),
-			PolicyStackType::Fifo(stack) => stack.insert(key, size),
-			PolicyStackType::Clock(stack) => stack.insert(key, size),
-			PolicyStackType::Sieve(stack) => stack.insert(key, size),
-			PolicyStackType::Lru(stack) => stack.insert(key, size),
-			PolicyStackType::Mru(stack) => stack.insert(key, size),
-			PolicyStackType::TwoQ(stack) => stack.insert(key, size),
-			PolicyStackType::SThreeFifo(stack) => stack.insert(key, size),
-		}
-	}
-
-	fn update(&mut self, key: HashedKey) {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.update(key),
-			PolicyStackType::Fifo(stack) => stack.update(key),
-			PolicyStackType::Clock(stack) => stack.update(key),
-			PolicyStackType::Sieve(stack) => stack.update(key),
-			PolicyStackType::Lru(stack) => stack.update(key),
-			PolicyStackType::Mru(stack) => stack.update(key),
-			PolicyStackType::TwoQ(stack) => stack.update(key),
-			PolicyStackType::SThreeFifo(stack) => stack.update(key),
-		}
-	}
-
-	fn remove(&mut self, key: HashedKey) {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.remove(key),
-			PolicyStackType::Fifo(stack) => stack.remove(key),
-			PolicyStackType::Clock(stack) => stack.remove(key),
-			PolicyStackType::Sieve(stack) => stack.remove(key),
-			PolicyStackType::Lru(stack) => stack.remove(key),
-			PolicyStackType::Mru(stack) => stack.remove(key),
-			PolicyStackType::TwoQ(stack) => stack.remove(key),
-			PolicyStackType::SThreeFifo(stack) => stack.remove(key),
-		}
-	}
-
-	fn clear(&mut self) {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.clear(),
-			PolicyStackType::Fifo(stack) => stack.clear(),
-			PolicyStackType::Clock(stack) => stack.clear(),
-			PolicyStackType::Sieve(stack) => stack.clear(),
-			PolicyStackType::Lru(stack) => stack.clear(),
-			PolicyStackType::Mru(stack) => stack.clear(),
-			PolicyStackType::TwoQ(stack) => stack.clear(),
-			PolicyStackType::SThreeFifo(stack) => stack.clear(),
-		}
-	}
-
-	fn pop(&mut self) -> Option<HashedKey> {
-		match self {
-			PolicyStackType::Lfu(stack) => stack.pop(),
-			PolicyStackType::Fifo(stack) => stack.pop(),
-			PolicyStackType::Clock(stack) => stack.pop(),
-			PolicyStackType::Sieve(stack) => stack.pop(),
-			PolicyStackType::Lru(stack) => stack.pop(),
-			PolicyStackType::Mru(stack) => stack.pop(),
-			PolicyStackType::TwoQ(stack) => stack.pop(),
-			PolicyStackType::SThreeFifo(stack) => stack.pop(),
-		}
-	}
-}
-
-impl PolicyStackType {
-	#[must_use]
-	pub fn new(policy: PaperPolicy, max_size: CacheSize) -> Self {
-		match policy {
-			PaperPolicy::Auto => PolicyStackType::Lfu(Box::default()),
-
-			PaperPolicy::Lfu => PolicyStackType::Lfu(Box::default()),
-			PaperPolicy::Fifo => PolicyStackType::Fifo(Box::default()),
-			PaperPolicy::Clock => PolicyStackType::Clock(Box::default()),
-			PaperPolicy::Sieve => PolicyStackType::Sieve(Box::default()),
-			PaperPolicy::Lru => PolicyStackType::Lru(Box::default()),
-			PaperPolicy::Mru => PolicyStackType::Mru(Box::default()),
-
-			PaperPolicy::TwoQ(k_in, k_out) => {
-				let stack = TwoQStack::new(k_in, k_out, max_size);
-				PolicyStackType::TwoQ(Box::new(stack))
-			},
-
-			PaperPolicy::SThreeFifo(ratio) => {
-				let stack = SThreeFifoStack::new(ratio, max_size);
-				PolicyStackType::SThreeFifo(Box::new(stack))
-			},
-		}
+pub fn init_policy_stack(policy: PaperPolicy, max_size: CacheSize) -> Box<dyn PolicyStack> {
+	match policy {
+		PaperPolicy::Auto => Box::new(LfuStack::default()),
+		PaperPolicy::Lfu => Box::new(LfuStack::default()),
+		PaperPolicy::Fifo => Box::new(FifoStack::default()),
+		PaperPolicy::Clock => Box::new(ClockStack::default()),
+		PaperPolicy::Sieve => Box::new(SieveStack::default()),
+		PaperPolicy::Lru => Box::new(LruStack::default()),
+		PaperPolicy::Mru => Box::new(MruStack::default()),
+		PaperPolicy::TwoQ(k_in, k_out) => Box::new(TwoQStack::new(k_in, k_out, max_size)),
+		PaperPolicy::SThreeFifo(ratio) => Box::new(SThreeFifoStack::new(ratio, max_size)),
 	}
 }

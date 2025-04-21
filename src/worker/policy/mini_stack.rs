@@ -6,11 +6,11 @@ use crate::{
 	NoHasher,
 	policy::PaperPolicy,
 	object::ObjectSize,
-	worker::policy::policy_stack::{PolicyStack, PolicyStackType},
+	worker::policy::policy_stack::{PolicyStack, init_policy_stack},
 };
 
 pub struct MiniStack {
-	stack: PolicyStackType,
+	stack: Box<dyn PolicyStack>,
 	sizes: HashMap<HashedKey, ObjectSize, NoHasher>,
 
 	policy: PaperPolicy,
@@ -25,7 +25,7 @@ pub struct MiniStack {
 impl MiniStack {
 	pub fn new(policy: PaperPolicy, size: CacheSize) -> Self {
 		MiniStack {
-			stack: PolicyStackType::new(policy, size),
+			stack: init_policy_stack(policy, size),
 			sizes: HashMap::with_hasher(NoHasher::default()),
 
 			policy,

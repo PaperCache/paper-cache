@@ -38,7 +38,7 @@ use crate::{
 			mini_stack::MiniStack,
 			event::StackEvent,
 			trace::{TraceWorker, TraceFragment},
-			policy_stack::{PolicyStack, PolicyStackType},
+			policy_stack::{PolicyStack, init_policy_stack},
 		},
 	},
 };
@@ -62,7 +62,7 @@ pub struct PolicyWorker<K, V> {
 	stats: StatsRef,
 	overhead_manager: OverheadManagerRef,
 
-	policy_stack: Option<PolicyStackType>,
+	policy_stack: Option<Box<dyn PolicyStack>>,
 
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 	trace_worker: Sender<StackEvent>,
@@ -85,7 +85,7 @@ where
 		let (
 			policy_reconstruct_tx,
 			policy_reconstruct_rx,
-		) = unbounded::<PolicyStackType>();
+		) = unbounded::<Box<dyn PolicyStack>>();
 
 		let policy_reconstruct_tx = Arc::new(policy_reconstruct_tx);
 		let mut buffered_events = Vec::<StackEvent>::new();
@@ -165,7 +165,7 @@ where
 			.collect::<Box<[_]>>();
 
 		let policy = stats.get_policy();
-		let policy_stack = PolicyStackType::new(policy, max_cache_size);
+		let policy_stack = init_policy_stack(policy, max_cache_size);
 
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
@@ -256,7 +256,7 @@ where
 	fn handle_policy(
 		&mut self,
 		policy: PaperPolicy,
-		policy_reconstruct_tx: Arc<Sender<PolicyStackType>>,
+		policy_reconstruct_tx: Arc<Sender<Box<dyn PolicyStack>>>,
 	) {
 		if policy.is_auto() || policy == *self.current_policy.read() {
 			return;
@@ -321,7 +321,7 @@ where
 	fn apply_buffered_events(
 		&mut self,
 		buffered_events: &[StackEvent],
-		policy_reconstruct_rx: &Receiver<PolicyStackType>,
+		policy_reconstruct_rx: &Receiver<Box<dyn PolicyStack>>,
 	) {
 		for mut stack in policy_reconstruct_rx.try_iter() {
 			for event in buffered_events {
@@ -503,8 +503,8 @@ fn reconstruct_policy_stack(
 	max_size: CacheSize,
 	current_policy: Arc<RwLock<PaperPolicy>>,
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
-) -> Result<PolicyStackType, CacheError> {
-	let mut stack = PolicyStackType::new(policy, max_size);
+) -> Result<Box<dyn PolicyStack>, CacheError> {
+	let mut stack = init_policy_stack(policy, max_size);
 
 	for fragment in trace_fragments.read().iter() {
 		let mut fragment_modifiers = fragment.lock();
