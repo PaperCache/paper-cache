@@ -5,6 +5,7 @@ mod sieve_stack;
 mod lru_stack;
 mod mru_stack;
 mod two_q_stack;
+mod arc_stack;
 mod s_three_fifo_stack;
 
 use crate::{
@@ -20,6 +21,7 @@ use crate::{
 		lru_stack::LruStack,
 		mru_stack::MruStack,
 		two_q_stack::TwoQStack,
+		arc_stack::ArcStack,
 		s_three_fifo_stack::SThreeFifoStack,
 	},
 };
@@ -52,6 +54,7 @@ pub fn init_policy_stack(policy: PaperPolicy, max_size: CacheSize) -> Box<dyn Po
 		PaperPolicy::Lru => Box::new(LruStack::default()),
 		PaperPolicy::Mru => Box::new(MruStack::default()),
 		PaperPolicy::TwoQ(k_in, k_out) => Box::new(TwoQStack::new(k_in, k_out, max_size)),
+		PaperPolicy::Arc => Box::new(ArcStack::new(max_size)),
 		PaperPolicy::SThreeFifo(ratio) => Box::new(SThreeFifoStack::new(ratio, max_size)),
 	}
 }

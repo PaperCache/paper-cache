@@ -20,6 +20,7 @@ pub enum PaperPolicy {
 	Lru,
 	Mru,
 	TwoQ(f64, f64),
+	Arc,
 	SThreeFifo(f64),
 }
 
@@ -40,6 +41,7 @@ impl Display for PaperPolicy {
 			PaperPolicy::Lru => write!(f, "lru"),
 			PaperPolicy::Mru => write!(f, "mru"),
 			PaperPolicy::TwoQ(k_in, k_out) => write!(f, "2q-{k_in}-{k_out}"),
+			PaperPolicy::Arc => write!(f, "arc"),
 			PaperPolicy::SThreeFifo(ratio) => write!(f, "s3-fifo-{ratio}"),
 		}
 	}
@@ -51,15 +53,14 @@ impl FromStr for PaperPolicy {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		let policy = match value {
 			"auto" => PaperPolicy::Auto,
-
 			"lfu" => PaperPolicy::Lfu,
 			"fifo" => PaperPolicy::Fifo,
 			"clock" => PaperPolicy::Clock,
 			"sieve" => PaperPolicy::Sieve,
 			"lru" => PaperPolicy::Lru,
 			"mru" => PaperPolicy::Mru,
-
 			value if value.starts_with("2q-") => parse_two_q(value)?,
+			"arc" => PaperPolicy::Arc,
 			value if value.starts_with("s3-fifo-") => parse_s_three_fifo(value)?,
 
 			_ => return Err(CacheError::InvalidPolicy),
