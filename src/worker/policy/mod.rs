@@ -5,6 +5,7 @@ mod trace;
 
 use std::{
 	thread,
+	cmp::Ordering,
 	sync::Arc,
 	time::{Instant, Duration},
 	io::{Seek, SeekFrom},
@@ -28,7 +29,10 @@ use crate::{
 	erase,
 	error::CacheError,
 	policy::PaperPolicy,
-	object::ObjectSize,
+	object::{
+		ObjectSize,
+		overhead::get_policy_overhead,
+	},
 	worker::{
 		Worker,
 		WorkerEvent,
@@ -456,7 +460,10 @@ where
 		}
 
 		self.last_auto_policy_time = Some(now);
+		self.get_optimal_policy()
+	}
 
+	fn get_optimal_policy(&self) -> Option<PaperPolicy> {
 		let current_miss_ratio = self.mini_stacks
 			.iter()
 			.find_map(|mini_stack| {
@@ -467,14 +474,27 @@ where
 				Some(mini_stack.miss_ratio())
 			})?;
 
-		let mini_stack = self.mini_stacks
+		let optimal_mini_stack = self.mini_stacks
 			.iter()
-			.min_by(|a, b| a.miss_ratio().total_cmp(&b.miss_ratio()))?;
+			.min_by(|a, b| {
+				match a.miss_ratio().total_cmp(&b.miss_ratio()) {
+					Ordering::Equal => {
+						// the two mini stacks have the same miss ratios, so
+						// select the one with the lower memory overhead
+						let a_overhead = get_policy_overhead(&a.policy());
+						let b_overhead = get_policy_overhead(&b.policy());
 
-		if mini_stack.miss_ratio() < current_miss_ratio {
+						a_overhead.cmp(&b_overhead)
+					},
+
+					cmp => cmp,
+				}
+			})?;
+
+		if optimal_mini_stack.miss_ratio() < current_miss_ratio {
 			// make sure we only switch to a different policy that performs better
 			// than the current policy
-			Some(mini_stack.policy())
+			Some(optimal_mini_stack.policy())
 		} else {
 			None
 		}
