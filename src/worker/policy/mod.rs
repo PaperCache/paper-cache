@@ -5,14 +5,12 @@ mod trace;
 
 use std::{
 	thread,
-	cmp::Ordering,
 	sync::Arc,
 	time::{Instant, Duration},
 	io::{Seek, SeekFrom},
 	collections::VecDeque,
 };
 
-use rayon::prelude::*;
 use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::{Sender, Receiver, unbounded};
@@ -29,27 +27,20 @@ use crate::{
 	erase,
 	error::CacheError,
 	policy::PaperPolicy,
-	object::{
-		ObjectSize,
-		overhead::get_policy_overhead,
-	},
+	object::ObjectSize,
 	worker::{
 		Worker,
 		WorkerEvent,
 		WorkerReceiver,
 		register_worker,
 		policy::{
-			mini_stack::MiniStack,
+			mini_stack::MiniStackManager,
 			event::StackEvent,
 			trace::{TraceWorker, TraceFragment},
 			policy_stack::{PolicyStack, init_policy_stack},
 		},
 	},
 };
-
-// the sampling modulus must be a power of 2
-const MINI_SAMPLING_MODULUS: u64 = 16_777_216;
-const MINI_SAMPLING_THRESHOLD: u64 = 16_777;
 
 // the polling value must be a power of 2
 const RECONSTRUCT_POLICY_POLLING: usize = 1_048_576;
@@ -71,7 +62,7 @@ pub struct PolicyWorker<K, V> {
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 	trace_worker: Sender<StackEvent>,
 
-	mini_stacks: Box<[MiniStack]>,
+	mini_stack_manager: MiniStackManager,
 	mini_index: Option<usize>,
 	current_policy: Arc<RwLock<PaperPolicy>>,
 
@@ -160,13 +151,11 @@ where
 		overhead_manager: OverheadManagerRef,
 	) -> Result<Self, CacheError> {
 		let max_cache_size = stats.get_max_size();
-		let mini_size = get_mini_stack_size(max_cache_size);
 
-		let mini_stacks = stats
-			.get_policies()
-			.iter()
-			.map(|policy| MiniStack::new(*policy, mini_size))
-			.collect::<Box<[_]>>();
+		let mini_stacks = MiniStackManager::new(
+			stats.get_policies(),
+			max_cache_size,
+		);
 
 		let policy = stats.get_policy();
 		let policy_stack = init_policy_stack(policy, max_cache_size);
@@ -197,7 +186,7 @@ where
 			trace_fragments,
 			trace_worker,
 
-			mini_stacks,
+			mini_stack_manager: mini_stacks,
 			mini_index: None,
 
 			current_policy: Arc::new(RwLock::new(policy)),
@@ -214,11 +203,7 @@ where
 			stack.update(key);
 		}
 
-		if self.should_mini_sample(key) {
-			self.mini_stacks
-				.par_iter_mut()
-				.for_each(|mini_stack| mini_stack.update_with_count(key));
-		}
+		self.mini_stack_manager.handle_get(key);
 	}
 
 	fn handle_set(&mut self, key: HashedKey, size: ObjectSize) {
@@ -226,11 +211,7 @@ where
 			stack.insert(key, size);
 		}
 
-		if self.should_mini_sample(key) {
-			self.mini_stacks
-				.par_iter_mut()
-				.for_each(|mini_stack| mini_stack.insert(key, size));
-		}
+		self.mini_stack_manager.handle_set(key, size);
 	}
 
 	fn handle_del(&mut self, key: HashedKey) {
@@ -238,11 +219,7 @@ where
 			stack.remove(key);
 		}
 
-		if self.should_mini_sample(key) {
-			self.mini_stacks
-				.par_iter_mut()
-				.for_each(|mini_stack| mini_stack.remove(key));
-		}
+		self.mini_stack_manager.handle_del(key);
 	}
 
 	fn handle_resize(&mut self, size: CacheSize) {
@@ -250,11 +227,7 @@ where
 			stack.resize(size);
 		}
 
-		let mini_size = get_mini_stack_size(size);
-
-		self.mini_stacks
-			.par_iter_mut()
-			.for_each(|mini_stack| mini_stack.resize(mini_size));
+		self.mini_stack_manager.handle_resize(size);
 	}
 
 	fn handle_policy(
@@ -273,10 +246,7 @@ where
 
 		*self.current_policy.write() = policy;
 
-		let mini_index = self.mini_stacks
-			.iter()
-			.position(|mini_stack| mini_stack.is_policy(&policy))
-			.unwrap_or(0);
+		let mini_index = self.mini_stack_manager.get_index(&policy);
 
 		self.policy_stack = None;
 		self.mini_index = Some(mini_index);
@@ -317,9 +287,7 @@ where
 			stack.clear();
 		}
 
-		self.mini_stacks
-			.par_iter_mut()
-			.for_each(|mini_stack| mini_stack.clear());
+		self.mini_stack_manager.handle_wipe();
 	}
 
 	fn apply_buffered_events(
@@ -411,8 +379,9 @@ where
 		let mut evictions = Vec::<HashedKey>::new();
 
 		while self.stats.get_used_size(&policy) > max_cache_size {
-			let maybe_key = self.mini_stacks[mini_index]
-				.pop().map(|key| EraseKey::Hashed(key));
+			let maybe_key = self.mini_stack_manager
+				.get_eviction(mini_index)
+				.map(|key| EraseKey::Hashed(key));
 
 			let erase_result = erase(
 				&self.objects,
@@ -429,18 +398,7 @@ where
 			buffered_events.push(StackEvent::Del(key));
 		}
 
-		for key in &evictions {
-			self.mini_stacks
-				.par_iter_mut()
-				.enumerate()
-				.filter(|(index, _)| *index != mini_index)
-				.for_each(|(_, mini_stack)| mini_stack.remove(*key));
-		}
-	}
-
-	fn should_mini_sample(&self, hashed_key: HashedKey) -> bool {
-		// this optimization only works if the sampling modulus is a power of 2
-		hashed_key & (MINI_SAMPLING_MODULUS - 1) < MINI_SAMPLING_THRESHOLD
+		self.mini_stack_manager.apply_evictions(mini_index, evictions);
 	}
 
 	fn perform_auto_policy(&mut self, now: Instant, has_current_set: bool) -> Option<PaperPolicy> {
@@ -460,44 +418,7 @@ where
 		}
 
 		self.last_auto_policy_time = Some(now);
-		self.get_optimal_policy()
-	}
-
-	fn get_optimal_policy(&self) -> Option<PaperPolicy> {
-		let current_miss_ratio = self.mini_stacks
-			.iter()
-			.find_map(|mini_stack| {
-				if !mini_stack.is_policy(&self.current_policy.read()) {
-					return None;
-				}
-
-				Some(mini_stack.miss_ratio())
-			})?;
-
-		let optimal_mini_stack = self.mini_stacks
-			.iter()
-			.min_by(|a, b| {
-				match a.miss_ratio().total_cmp(&b.miss_ratio()) {
-					Ordering::Equal => {
-						// the two mini stacks have the same miss ratios, so
-						// select the one with the lower memory overhead
-						let a_overhead = get_policy_overhead(&a.policy());
-						let b_overhead = get_policy_overhead(&b.policy());
-
-						a_overhead.cmp(&b_overhead)
-					},
-
-					cmp => cmp,
-				}
-			})?;
-
-		if optimal_mini_stack.miss_ratio() < current_miss_ratio {
-			// make sure we only switch to a different policy that performs better
-			// than the current policy
-			Some(optimal_mini_stack.policy())
-		} else {
-			None
-		}
+		self.mini_stack_manager.get_optimal_policy(&self.current_policy.read())
 	}
 
 	fn delay_event_loop(&mut self, now: Instant, has_current_set: bool) {
@@ -570,11 +491,6 @@ fn reconstruct_policy_stack(
 	}
 
 	Ok(stack)
-}
-
-fn get_mini_stack_size(size: CacheSize) -> CacheSize {
-	let ratio = MINI_SAMPLING_THRESHOLD as f64 / MINI_SAMPLING_MODULUS as f64;
-	(size as f64 * ratio) as u64
 }
 
 unsafe impl<K, V> Send for PolicyWorker<K, V>

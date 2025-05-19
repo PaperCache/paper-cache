@@ -1,3 +1,5 @@
+mod manager;
+
 use std::collections::HashMap;
 
 use crate::{
@@ -18,7 +20,6 @@ pub struct MiniStack {
 	max_size: CacheSize,
 	used_size: CacheSize,
 
-	count: u64,
 	hits: u64,
 }
 
@@ -33,7 +34,6 @@ impl MiniStack {
 			max_size: size,
 			used_size: 0,
 
-			count: 0,
 			hits: 0,
 		}
 	}
@@ -42,16 +42,14 @@ impl MiniStack {
 		self.policy
 	}
 
-	pub fn miss_ratio(&self) -> f64 {
-		match self.count {
-			0 => 1.0,
-			count => 1.0 - self.hits as f64 / count as f64,
+	pub fn miss_ratio(&self, expected_count: f64) -> f64 {
+		match expected_count {
+			0.0 => 1.0,
+			count => (1.0 - self.hits as f64 / count).clamp(0.0, 1.0),
 		}
 	}
 
 	pub fn update_with_count(&mut self, key: HashedKey) {
-		self.count += 1;
-
 		if self.stack.contains(key) {
 			self.hits += 1;
 		}
@@ -121,7 +119,6 @@ impl PolicyStack for MiniStack {
 		self.sizes.clear();
 		self.used_size = 0;
 
-		self.count = 0;
 		self.hits = 0;
 	}
 
@@ -136,6 +133,8 @@ impl PolicyStack for MiniStack {
 		maybe_key
 	}
 }
+
+pub use crate::worker::policy::mini_stack::manager::MiniStackManager;
 
 #[cfg(test)]
 mod tests {
