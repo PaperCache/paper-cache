@@ -92,6 +92,8 @@ impl MiniStackManager {
 		self.mini_stacks
 			.par_iter_mut()
 			.for_each(|mini_stack| mini_stack.clear());
+
+		self.total_gets = 0;
 	}
 
 	pub fn apply_evictions(&mut self, exclude_index: usize, evictions: Vec<HashedKey>) {
