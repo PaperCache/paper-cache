@@ -99,7 +99,7 @@ impl PolicyStack for SThreeFifoStack {
 		self.ghost.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		if !self.main.is_full() {
 			// prioritize evicting from the small stack when possible
 			if let Some(key) = self.evict_small() {
@@ -270,9 +270,9 @@ mod tests {
 		}
 
 		for eviction in [1, 2, 3, 4, 5, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }

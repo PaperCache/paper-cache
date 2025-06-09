@@ -114,7 +114,7 @@ impl PolicyStack for LfuStack {
 		self.count_stacks.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		let count_stack_index = self.count_stacks.front_index()?;
 		let count_stack = self.count_stacks.get_mut(count_stack_index)?;
 
@@ -167,9 +167,9 @@ mod tests {
 		}
 
 		for eviction in [3, 2, 1, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }

@@ -53,7 +53,7 @@ impl PolicyStack for LruStack {
 		self.stack.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		self.stack.pop_back()
 	}
 }
@@ -71,9 +71,9 @@ mod tests {
 		}
 
 		for eviction in [1, 3, 2, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }

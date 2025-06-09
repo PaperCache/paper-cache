@@ -66,7 +66,7 @@ impl PolicyStack for SieveStack {
 		self.stack.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		loop {
 			let key = self.hand.or_else(||
 				self.stack
@@ -136,16 +136,16 @@ mod tests {
 			stack.insert(access, 1);
 		}
 
-		assert_eq!(stack.pop(), Some(1));
+		assert_eq!(stack.evict_one(), Some(1));
 
 		for access in [3, 0, 1, 3] {
 			stack.insert(access, 1);
 		}
 
 		for eviction in [2, 1, 3, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }

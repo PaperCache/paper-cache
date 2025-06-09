@@ -140,7 +140,7 @@ impl PolicyStack for ArcStack {
 		self.b2.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		if self.t1.used_size + self.b1.used_size >= self.max_size {
 			if self.t1.used_size < self.max_size {
 				self.b1.pop();
@@ -280,9 +280,9 @@ mod tests {
 		}
 
 		for eviction in [3, 4, 5, 1, 2, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }

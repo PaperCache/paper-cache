@@ -48,7 +48,7 @@ where
 	fn resize(&mut self, _size: CacheSize) {}
 	fn clear(&mut self);
 
-	fn pop(&mut self) -> Option<HashedKey>;
+	fn evict_one(&mut self) -> Option<HashedKey>;
 }
 
 pub fn init_policy_stack(policy: PaperPolicy, max_size: CacheSize) -> Box<dyn PolicyStack> {

@@ -52,7 +52,7 @@ impl MiniStackManager {
 	}
 
 	pub fn get_eviction(&mut self, index: usize) -> Option<HashedKey> {
-		self.mini_stacks[index].pop()
+		self.mini_stacks[index].evict_one()
 	}
 
 	pub fn handle_get(&mut self, key: HashedKey) {

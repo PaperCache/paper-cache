@@ -357,7 +357,8 @@ where
 			let maybe_key = self.policy_stack
 				.as_mut()
 				.ok_or(CacheError::Internal)?
-				.pop().map(|key| EraseKey::Hashed(key));
+				.evict_one()
+				.map(|key| EraseKey::Hashed(key));
 
 			let erase_result = erase(
 				&self.objects,

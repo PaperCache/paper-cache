@@ -67,7 +67,7 @@ impl MiniStack {
 	fn reduce(&mut self, target_size: CacheSize) {
 		while self.used_size > target_size {
 			let maybe_object_size = self.stack
-				.pop()
+				.evict_one()
 				.and_then(|evict_key| self.sizes.remove(&evict_key));
 
 			if let Some(object_size) = maybe_object_size {
@@ -129,8 +129,8 @@ impl PolicyStack for MiniStack {
 		self.hits = 0;
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
-		let maybe_key = self.stack.pop();
+	fn evict_one(&mut self) -> Option<HashedKey> {
+		let maybe_key = self.stack.evict_one();
 		let maybe_size = maybe_key.and_then(|key| self.sizes.remove(&key));
 
 		if let Some(size) = maybe_size {

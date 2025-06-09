@@ -101,7 +101,7 @@ impl PolicyStack for TwoQStack {
 		self.am.clear();
 	}
 
-	fn pop(&mut self) -> Option<HashedKey> {
+	fn evict_one(&mut self) -> Option<HashedKey> {
 		if let Some(object) = self.a1_out.pop() {
 			return Some(object.key);
 		}
@@ -248,9 +248,9 @@ mod tests {
 		}
 
 		for eviction in [3, 4, 5, 1, 2, 0] {
-			assert_eq!(stack.pop(), Some(eviction));
+			assert_eq!(stack.evict_one(), Some(eviction));
 		}
 
-		assert_eq!(stack.pop(), None);
+		assert_eq!(stack.evict_one(), None);
 	}
 }
