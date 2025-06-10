@@ -1,11 +1,11 @@
 [package]
 name = "paper_cache"
-version = "1.11.2"
+version = "1.11.3"
 edition = "2024"
 
 [dependencies]
 dlv-list = "0.6.0"
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.17.3" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.18.5" }
 paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.2.3" }
 thiserror = "2.0.12"
 dashmap = "6.1.0"
@@ -13,7 +13,7 @@ crossbeam-channel = "0.5.15"
 typesize = "0.1.14"
 byteorder = "1.5.0"
 tempfile = "3.20.0"
-parking_lot = "0.12.3"
+parking_lot = "0.12.4"
 log = "0.4.27"
 nohash-hasher = "0.2.0"
 serde = { version = "1.0.219", features = ["derive"] }

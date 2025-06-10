@@ -182,7 +182,7 @@ impl ArcStack {
 	}
 
 	fn replace(&mut self) -> Option<HashedKey> {
-		if !self.t1.stack.is_empty() && self.t1.used_size as f64 > self.p {
+		if !self.t1.stack.is_empty() && self.t1.used_size as f64 >= self.p || self.t2.stack.is_empty() {
 			let object = self.t1.pop()?;
 			let key = object.key;
 
