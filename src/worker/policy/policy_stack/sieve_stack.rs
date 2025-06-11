@@ -64,6 +64,7 @@ impl PolicyStack for SieveStack {
 
 	fn clear(&mut self) {
 		self.stack.clear();
+		self.hand = None;
 	}
 
 	fn evict_one(&mut self) -> Option<HashedKey> {

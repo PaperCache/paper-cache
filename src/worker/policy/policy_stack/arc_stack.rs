@@ -138,6 +138,8 @@ impl PolicyStack for ArcStack {
 
 		self.b1.clear();
 		self.b2.clear();
+
+		self.p = 0.0;
 	}
 
 	fn evict_one(&mut self) -> Option<HashedKey> {

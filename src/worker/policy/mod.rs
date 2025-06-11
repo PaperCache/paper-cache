@@ -42,7 +42,7 @@ use crate::{
 		register_worker,
 		policy::{
 			mini_stack::MiniStackManager,
-			event::StackEvent,
+			event::{StackEvent, TraceEvent},
 			trace::{TraceWorker, TraceFragment},
 			policy_stack::{PolicyStack, init_policy_stack},
 		},
@@ -482,11 +482,10 @@ fn reconstruct_policy_stack(
 			}
 
 			match event {
-				StackEvent::Get(key) => stack.update(key),
-				StackEvent::Set(key, size) => stack.insert(key, size),
-				StackEvent::Del(key) => stack.remove(key),
-				StackEvent::Wipe => stack.clear(),
-				StackEvent::Resize(size) => stack.resize(size),
+				TraceEvent::Get(key) => stack.update(key),
+				TraceEvent::Set(key, size) => stack.insert(key, size),
+				TraceEvent::Del(key) => stack.remove(key),
+				TraceEvent::Resize(size) => stack.resize(size),
 			}
 		}
 

@@ -16,14 +16,13 @@ use std::{
 
 use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
-
 use kwik::file::FileWriter;
 
 use crate::{
 	error::CacheError,
 	worker::{
 		Worker,
-		policy::event::StackEvent,
+		policy::event::{StackEvent, TraceEvent},
 	},
 };
 
@@ -45,22 +44,41 @@ impl Worker for TraceWorker {
 
 			if !events.is_empty() {
 				self.refresh_fragments()?;
-
-				let fragments = self.trace_fragments.read();
-				let fragment = fragments.back().ok_or(CacheError::Internal)?;
-
-				let mut modifiers = fragment.lock();
-				let writer = &mut modifiers.1;
+				let mut should_flush = false;
 
 				for event in events {
-					writer
-						.write_chunk(&event)
-						.map_err(|_| CacheError::Internal)?;
+					if matches!(event, StackEvent::Wipe) {
+						// wiping the cache deletes all the trace fragments
+						self.trace_fragments.write().clear();
+						self.refresh_fragments()?;
+					}
+
+					if let Some(event) = TraceEvent::maybe_from_stack_event(&event) {
+						let fragments = self.trace_fragments.read();
+						let fragment = fragments.back().ok_or(CacheError::Internal)?;
+
+						let mut modifiers = fragment.lock();
+						let writer = &mut modifiers.1;
+
+						writer
+							.write_chunk(&event)
+							.map_err(|_| CacheError::Internal)?;
+
+						should_flush = true;
+					}
 				}
 
-				writer
-					.flush()
-					.map_err(|_| CacheError::Internal)?;
+				if should_flush {
+					let fragments = self.trace_fragments.read();
+					let fragment = fragments.back().ok_or(CacheError::Internal)?;
+
+					let mut modifiers = fragment.lock();
+					let writer = &mut modifiers.1;
+
+					writer
+						.flush()
+						.map_err(|_| CacheError::Internal)?;
+				}
 			}
 
 			thread::sleep(POLL_DELAY);

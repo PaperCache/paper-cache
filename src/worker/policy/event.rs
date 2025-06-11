@@ -24,7 +24,12 @@ pub enum StackEvent {
 	Resize(CacheSize),
 }
 
-struct EventByte;
+pub enum TraceEvent {
+	Get(HashedKey),
+	Set(HashedKey, ObjectSize),
+	Del(HashedKey),
+	Resize(CacheSize),
+}
 
 impl StackEvent {
 	pub fn maybe_from_worker_event(worker_event: &WorkerEvent) -> Option<Self> {
@@ -42,7 +47,22 @@ impl StackEvent {
 	}
 }
 
-impl SizedChunk for StackEvent {
+impl TraceEvent {
+	pub fn maybe_from_stack_event(stack_event: &StackEvent) -> Option<Self> {
+		let event = match stack_event {
+			StackEvent::Get(key) => TraceEvent::Get(*key),
+			StackEvent::Set(key, size) => TraceEvent::Set(*key, *size),
+			StackEvent::Del(key) => TraceEvent::Del(*key),
+			StackEvent::Resize(size) => TraceEvent::Resize(*size),
+
+			_ => return None,
+		};
+
+		Some(event)
+	}
+}
+
+impl SizedChunk for TraceEvent {
 	fn chunk_size() -> usize {
 		let set_size = HashedKey::chunk_size() + ObjectSize::chunk_size() + 1;
 		let resize_size = CacheSize::chunk_size() + 1;
@@ -51,30 +71,28 @@ impl SizedChunk for StackEvent {
 	}
 }
 
-impl ReadChunk for StackEvent {
+impl ReadChunk for TraceEvent {
 	fn from_chunk(buf: &[u8]) -> std::io::Result<Self> {
 		let event = match buf[0] {
 			EventByte::GET => {
 				let key = HashedKey::from_chunk(&buf[1..HashedKey::chunk_size() + 1])?;
-				StackEvent::Get(key)
+				TraceEvent::Get(key)
 			},
 
 			EventByte::SET => {
 				let key = HashedKey::from_chunk(&buf[1..HashedKey::chunk_size() + 1])?;
 				let size = ObjectSize::from_chunk(&buf[HashedKey::chunk_size() + 1..])?;
-				StackEvent::Set(key, size)
+				TraceEvent::Set(key, size)
 			},
 
 			EventByte::DEL => {
 				let key = HashedKey::from_chunk(&buf[1..HashedKey::chunk_size() + 1])?;
-				StackEvent::Del(key)
+				TraceEvent::Del(key)
 			},
-
-			EventByte::WIPE => StackEvent::Wipe,
 
 			EventByte::RESIZE => {
 				let size = CacheSize::from_chunk(&buf[1..CacheSize::chunk_size() + 1])?;
-				StackEvent::Resize(size)
+				TraceEvent::Resize(size)
 			},
 
 			_ => unreachable!(),
@@ -84,46 +102,38 @@ impl ReadChunk for StackEvent {
 	}
 }
 
-impl WriteChunk for StackEvent {
+impl WriteChunk for TraceEvent {
 	fn as_chunk(&self, buf: &mut Vec<u8>) -> io::Result<()> {
 		match self {
-			StackEvent::Get(key) => {
+			TraceEvent::Get(key) => {
 				buf.push(EventByte::GET);
 				key.as_chunk(buf)?;
 
-				let remaining = StackEvent::chunk_size() - HashedKey::chunk_size() - 1;
+				let remaining = TraceEvent::chunk_size() - HashedKey::chunk_size() - 1;
 				let zeros = std::iter::repeat_n(0, remaining);
 				buf.extend(zeros);
 			},
 
-			StackEvent::Set(key, size) => {
+			TraceEvent::Set(key, size) => {
 				buf.push(EventByte::SET);
 				key.as_chunk(buf)?;
 				size.as_chunk(buf)?;
 			},
 
-			StackEvent::Del(key) => {
+			TraceEvent::Del(key) => {
 				buf.push(EventByte::DEL);
 				key.as_chunk(buf)?;
 
-				let remaining = StackEvent::chunk_size() - HashedKey::chunk_size() - 1;
+				let remaining = TraceEvent::chunk_size() - HashedKey::chunk_size() - 1;
 				let zeros = std::iter::repeat_n(0, remaining);
 				buf.extend(zeros);
 			},
 
-			StackEvent::Wipe => {
-				buf.push(EventByte::WIPE);
-
-				let remaining = StackEvent::chunk_size() - 1;
-				let zeros = std::iter::repeat_n(0, remaining);
-				buf.extend(zeros);
-			},
-
-			StackEvent::Resize(size) => {
+			TraceEvent::Resize(size) => {
 				buf.push(EventByte::RESIZE);
 				size.as_chunk(buf)?;
 
-				let remaining = StackEvent::chunk_size() - CacheSize::chunk_size() - 1;
+				let remaining = TraceEvent::chunk_size() - CacheSize::chunk_size() - 1;
 				let zeros = std::iter::repeat_n(0, remaining);
 				buf.extend(zeros);
 			},
@@ -133,10 +143,11 @@ impl WriteChunk for StackEvent {
 	}
 }
 
+struct EventByte;
+
 impl EventByte {
 	const GET: u8		= 0;
 	const SET: u8		= 1;
 	const DEL: u8		= 2;
-	const WIPE: u8		= 3;
-	const RESIZE: u8	= 4;
+	const RESIZE: u8	= 3;
 }

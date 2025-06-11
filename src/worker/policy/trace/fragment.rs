@@ -19,9 +19,9 @@ use kwik::file::{
 	binary::{BinaryReader, BinaryWriter},
 };
 
-use crate::worker::policy::event::StackEvent;
+use crate::worker::policy::event::TraceEvent;
 
-type Modifiers = (BinaryReader<StackEvent>, BinaryWriter<StackEvent>);
+pub type Modifiers = (BinaryReader<TraceEvent>, BinaryWriter<TraceEvent>);
 
 // REFRESH_AGE must be less than MAX_AGE
 const MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
@@ -37,8 +37,8 @@ impl TraceFragment {
 		let reader_file = tempfile()?;
 		let writer_file = reader_file.try_clone()?;
 
-		let reader = BinaryReader::<StackEvent>::from_file(reader_file)?;
-		let writer = BinaryWriter::<StackEvent>::from_file(writer_file)?;
+		let reader = BinaryReader::<TraceEvent>::from_file(reader_file)?;
+		let writer = BinaryWriter::<TraceEvent>::from_file(writer_file)?;
 
 		let fragment = TraceFragment {
 			created: Instant::now(),
