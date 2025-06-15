@@ -165,8 +165,7 @@ where
 		policies: &[PaperPolicy],
 		policy: PaperPolicy,
 		hasher: S,
-	) -> Result<Self, CacheError>
-	{
+	) -> Result<Self, CacheError> {
 		if max_size == 0 {
 			return Err(CacheError::ZeroCacheSize);
 		}
