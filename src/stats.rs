@@ -10,6 +10,7 @@ use std::sync::{
 	atomic::{Ordering, AtomicBool, AtomicU64, AtomicUsize},
 };
 
+use num_traits::AsPrimitive;
 use kwik::time;
 
 use crate::{
@@ -17,10 +18,7 @@ use crate::{
 	AtomicCacheSize,
 	error::CacheError,
 	policy::PaperPolicy,
-	object::{
-		ObjectSize,
-		overhead::get_policy_overhead,
-	},
+	object::overhead::get_policy_overhead,
 };
 
 #[derive(Debug)]
@@ -176,8 +174,8 @@ impl AtomicStats {
 
 	#[must_use]
 	pub fn get_used_size(&self, policy: &PaperPolicy) -> CacheSize {
-		let base_used_size = self.base_used_size.load(Ordering::Relaxed);
-		let num_objects = self.num_objects.load(Ordering::Relaxed);
+		let base_used_size = self.base_used_size.load(Ordering::Acquire);
+		let num_objects = self.num_objects.load(Ordering::Acquire);
 		let policy_overhead = get_policy_overhead(policy);
 
 		base_used_size + num_objects * policy_overhead as CacheSize
@@ -220,20 +218,22 @@ impl AtomicStats {
 		self.max_size.store(max_size, Ordering::Relaxed);
 	}
 
-	pub fn increase_base_used_size(&self, size: ObjectSize) {
-		self.base_used_size.fetch_add(size.into(), Ordering::Relaxed);
-	}
+	pub fn update_base_used_size(&self, delta: impl AsPrimitive<i64>) {
+		let delta = delta.as_();
 
-	pub fn decrease_base_used_size(&self, size: ObjectSize) {
-		self.base_used_size.fetch_sub(size.into(), Ordering::Relaxed);
+		if delta > 0 {
+			self.base_used_size.fetch_add(delta.unsigned_abs(), Ordering::AcqRel);
+		} else if delta < 0 {
+			self.base_used_size.fetch_sub(delta.unsigned_abs(), Ordering::AcqRel);
+		}
 	}
 
 	pub fn incr_num_objects(&self) {
-		self.num_objects.fetch_add(1, Ordering::Relaxed);
+		self.num_objects.fetch_add(1, Ordering::AcqRel);
 	}
 
 	pub fn decr_num_objects(&self) {
-		self.num_objects.fetch_sub(1, Ordering::Relaxed);
+		self.num_objects.fetch_sub(1, Ordering::AcqRel);
 	}
 
 	pub fn set_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
@@ -262,13 +262,13 @@ impl AtomicStats {
 	}
 
 	#[must_use]
-	pub fn exceeds_max_size(&self, size: u64) -> bool {
-		size > self.max_size.load(Ordering::Relaxed)
+	pub fn exceeds_max_size(&self, size: impl AsPrimitive<u64>) -> bool {
+		size.as_() > self.max_size.load(Ordering::Relaxed)
 	}
 
 	pub fn clear(&self) {
-		self.base_used_size.store(0, Ordering::Relaxed);
-		self.num_objects.store(0, Ordering::Relaxed);
+		self.base_used_size.store(0, Ordering::Release);
+		self.num_objects.store(0, Ordering::Release);
 
 		self.total_hits.store(0, Ordering::Relaxed);
 		self.total_gets.store(0, Ordering::Relaxed);
@@ -283,7 +283,7 @@ impl AtomicStats {
 		Stats {
 			max_size: self.get_max_size(),
 			used_size: self.get_used_size(&policy),
-			num_objects: self.num_objects.load(Ordering::Relaxed),
+			num_objects: self.num_objects.load(Ordering::Acquire),
 
 			total_hits: self.total_hits.load(Ordering::Relaxed),
 			total_gets: self.total_gets.load(Ordering::Relaxed),
@@ -326,14 +326,14 @@ mod tests {
 			PaperPolicy::Lfu,
 		).expect("Could not initialize atomic stats.");
 
-		stats.increase_base_used_size(1);
+		stats.update_base_used_size(1);
 		stats.incr_num_objects();
 		stats.incr_hits();
 		stats.incr_sets();
 		stats.incr_dels();
 
-		assert_eq!(stats.base_used_size.load(Ordering::Relaxed), 1);
-		assert_eq!(stats.num_objects.load(Ordering::Relaxed), 1);
+		assert_eq!(stats.base_used_size.load(Ordering::Acquire), 1);
+		assert_eq!(stats.num_objects.load(Ordering::Acquire), 1);
 		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 1);
 		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 1);
 		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 1);
@@ -341,8 +341,8 @@ mod tests {
 
 		stats.clear();
 
-		assert_eq!(stats.base_used_size.load(Ordering::Relaxed), 0);
-		assert_eq!(stats.num_objects.load(Ordering::Relaxed), 0);
+		assert_eq!(stats.base_used_size.load(Ordering::Acquire), 0);
+		assert_eq!(stats.num_objects.load(Ordering::Acquire), 0);
 		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 0);
 		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 0);
 		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 0);

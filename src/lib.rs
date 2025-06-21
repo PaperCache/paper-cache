@@ -324,7 +324,7 @@ where
 			return Err(CacheError::ZeroValueSize);
 		}
 
-		if self.stats.exceeds_max_size(base_size.into()) {
+		if self.stats.exceeds_max_size(base_size) {
 			return Err(CacheError::ExceedingValueSize);
 		}
 
@@ -339,15 +339,15 @@ where
 				(base_size, expiry)
 			});
 
-		self.stats.increase_base_used_size(base_size);
-
-		if let Some((old_object_size, _)) = old_object_info {
-			self.stats.decrease_base_used_size(old_object_size);
+		let base_size_delta = if let Some((old_object_size, _)) = old_object_info {
+			base_size as i64 - old_object_size as i64
 		} else {
 			// the object is new, so increase the number of objects count
 			self.stats.incr_num_objects();
-		}
+			base_size as i64
+		};
 
+		self.stats.update_base_used_size(base_size_delta);
 		self.broadcast(WorkerEvent::Set(hashed_key, base_size, expiry, old_object_info))?;
 
 		Ok(())
@@ -485,12 +485,7 @@ where
 		let new_expiry = object.expiry();
 		let new_base_size = self.overhead_manager.base_size(&object);
 
-		if new_base_size > old_base_size {
-			self.stats.increase_base_used_size(new_base_size - old_base_size);
-		} else if new_base_size < old_base_size {
-			self.stats.decrease_base_used_size(old_base_size - new_base_size);
-		}
-
+		self.stats.update_base_used_size(new_base_size as i64 - old_base_size as i64);
 		self.broadcast(WorkerEvent::Ttl(hashed_key, old_expiry, new_expiry))?;
 
 		Ok(())
@@ -679,9 +674,9 @@ where
 	};
 
 	let object = entry.remove();
-	let base_size = overhead_manager.base_size(&object);
+	let base_size = overhead_manager.base_size(&object) as i64;
 
-	stats.decrease_base_used_size(base_size);
+	stats.update_base_used_size(-base_size);
 	stats.decr_num_objects();
 
 	match !object.is_expired() {

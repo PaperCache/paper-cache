@@ -1,6 +1,6 @@
 [package]
 name = "paper_cache"
-version = "1.11.4"
+version = "1.11.5"
 edition = "2024"
 
 [dependencies]
@@ -18,3 +18,4 @@ log = "0.4.27"
 nohash-hasher = "0.2.0"
 serde = { version = "1.0.219", features = ["derive"] }
 rayon = "1.10.0"
+num-traits = "0.2.19"
