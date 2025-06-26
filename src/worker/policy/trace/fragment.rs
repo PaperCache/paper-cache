@@ -56,7 +56,7 @@ impl TraceFragment {
 		self.created.elapsed() <= REFRESH_AGE
 	}
 
-	pub fn lock(&self) -> MutexGuard<Modifiers> {
+	pub fn lock(&self) -> MutexGuard<'_, Modifiers> {
 		self.modifiers.lock()
 	}
 }

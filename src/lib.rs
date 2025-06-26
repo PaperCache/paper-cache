@@ -667,10 +667,8 @@ where
 		return Err(CacheError::KeyNotFound);
 	};
 
-	if let Some(EraseKey::Original(key, _)) = maybe_key {
-		if !entry.get().key_matches(key) {
-			return Err(CacheError::KeyNotFound);
-		}
+	if let Some(EraseKey::Original(key, _)) = maybe_key && !entry.get().key_matches(key) {
+		return Err(CacheError::KeyNotFound);
 	};
 
 	let object = entry.remove();
