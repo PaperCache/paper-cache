@@ -59,6 +59,10 @@ impl PolicyStack for SieveStack {
 	}
 
 	fn remove(&mut self, key: HashedKey) {
+		self.hand = self.stack
+			.before(&key)
+			.map(|object| object.key);
+
 		self.stack.remove(&key);
 	}
 
