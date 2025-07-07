@@ -1,12 +1,19 @@
 [package]
-name = "paper_cache"
-version = "1.11.6"
+name = "paper-cache"
+version = "1.11.7"
 edition = "2024"
+license = "AGPL-3.0"
+description = "An in-memory cache with dynamic eviction policies."
+repository = "https://github.com/PaperCache/paper-cache.git"
+readme = "README.md"
+homepage = "https://papercache.io"
+keywords = ["caching", "PaperCache"]
+categories = ["caching"]
 
 [dependencies]
 dlv-list = "0.6.0"
 kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.18.5" }
-paper_utils = { git = "ssh://git@github.com/Paper-Book/paper-utils.git", tag = "v1.2.3" }
+paper-utils = "1.2.5"
 thiserror = "2.0.12"
 dashmap = "6.1.0"
 crossbeam-channel = "0.5.15"
