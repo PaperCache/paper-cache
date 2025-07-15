@@ -247,11 +247,11 @@ where
 	///
 	/// cache.set(0, 0, None);
 	///
-	/// assert!(cache.status().get_used_size() > 0);
+	/// let status = cache.status().unwrap();
+	/// assert!(status.used_size() > 0);
 	/// ```
-	#[must_use]
-	pub fn status(&self) -> Status {
-		self.status.to_status()
+	pub fn status(&self) -> Result<Status, CacheError> {
+		self.status.try_to_status()
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -571,7 +571,7 @@ where
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		let current_max_size = self.status.get_max_size();
+		let current_max_size = self.status.max_size();
 
 		if max_size == current_max_size {
 			return Ok(());
@@ -605,7 +605,7 @@ where
 	/// assert!(cache.policy(PaperPolicy::Lru).is_err());
 	/// ```
 	pub fn policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		if !policy.is_auto() && !self.status.get_policies().contains(&policy) {
+		if !policy.is_auto() && !self.status.policies().contains(&policy) {
 			return Err(CacheError::UnconfiguredPolicy);
 		}
 
@@ -700,9 +700,9 @@ mod tests {
 	#[test]
 	fn it_returns_status() {
 		let cache = init_test_cache();
-		let status = cache.status();
+		let status = cache.status().unwrap();
 
-		assert_eq!(status.get_max_size(), TEST_CACHE_MAX_SIZE);
+		assert_eq!(status.max_size(), TEST_CACHE_MAX_SIZE);
 	}
 
 	#[test]
@@ -731,8 +731,8 @@ mod tests {
 		assert!(cache.get(&0).is_ok());
 		assert!(cache.get(&1).is_err());
 
-		let status = cache.status();
-		assert_eq!(status.get_miss_ratio(), 0.25);
+		let status = cache.status().unwrap();
+		assert_eq!(status.miss_ratio(), 0.25);
 	}
 
 	#[test]
@@ -1036,8 +1036,8 @@ mod tests {
 		assert!(cache.set(0, 1, None).is_ok());
 		assert!(cache.set(1, 1, Some(1)).is_ok());
 
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), expected as u64);
 	}
 
 	#[test]
@@ -1060,12 +1060,12 @@ mod tests {
 		let lru_expected = base_expected + get_policy_overhead(&PaperPolicy::Lru);
 
 		assert!(cache.set(0, 1, None).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), lfu_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), lfu_expected as u64);
 
 		assert!(cache.policy(PaperPolicy::Lru).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), lru_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), lru_expected as u64);
 	}
 
 	#[test]
@@ -1086,12 +1086,12 @@ mod tests {
 		let post_expected = pre_expected + get_ttl_overhead();
 
 		assert!(cache.set(0, 1, None).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), pre_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), pre_expected as u64);
 
 		assert!(cache.ttl(&0, Some(1)).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), post_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), post_expected as u64);
 	}
 
 	#[test]
@@ -1113,12 +1113,12 @@ mod tests {
 		let post_expected = pre_expected - get_ttl_overhead();
 
 		assert!(cache.set(0, 1, Some(1)).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), pre_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), pre_expected as u64);
 
 		assert!(cache.ttl(&0, None).is_ok());
-		let status = cache.status();
-		assert_eq!(status.get_used_size(), post_expected as u64);
+		let status = cache.status().unwrap();
+		assert_eq!(status.used_size(), post_expected as u64);
 	}
 
 	fn init_test_cache() -> PaperCache<u32, u32> {

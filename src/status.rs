@@ -5,13 +5,20 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::sync::{
-	Arc,
-	atomic::{Ordering, AtomicBool, AtomicU64, AtomicUsize},
+use std::{
+	process,
+	sync::{
+		Arc,
+		atomic::{Ordering, AtomicBool, AtomicU64, AtomicUsize},
+	},
 };
 
 use num_traits::AsPrimitive;
-use kwik::time;
+
+use kwik::{
+	time,
+	sys::mem,
+};
 
 use crate::{
 	CacheSize,
@@ -23,9 +30,14 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Status {
+	pid: u32,
+
 	max_size: CacheSize,
 	used_size: CacheSize,
 	num_objects: u64,
+
+	rss: u64,
+	hwm: u64,
 
 	total_hits: u64,
 	total_gets: u64,
@@ -58,45 +70,63 @@ pub struct AtomicStatus {
 
 /// This struct holds the basic statistical information about `PaperCache`.
 impl Status {
+	/// Returns the cache's PID.
+	#[must_use]
+	pub fn pid(&self) -> u32 {
+		self.pid
+	}
+
 	/// Returns the cache's maximum size.
 	#[must_use]
-	pub fn get_max_size(&self) -> CacheSize {
+	pub fn max_size(&self) -> CacheSize {
 		self.max_size
 	}
 
 	/// Returns the cache's used size.
 	#[must_use]
-	pub fn get_used_size(&self) -> CacheSize {
+	pub fn used_size(&self) -> CacheSize {
 		self.used_size
 	}
 
 	/// Returns the number of objects in the cache.
 	#[must_use]
-	pub fn get_num_objects(&self) -> u64 {
+	pub fn num_objects(&self) -> u64 {
 		self.num_objects
+	}
+
+	/// Returns the cache's resident set size.
+	#[must_use]
+	pub fn rss(&self) -> u64 {
+		self.rss
+	}
+
+	/// Returns the cache's resident set size high water mark.
+	#[must_use]
+	pub fn hwm(&self) -> u64 {
+		self.hwm
 	}
 
 	/// Returns the cache's total number of gets.
 	#[must_use]
-	pub fn get_total_gets(&self) -> u64 {
+	pub fn total_gets(&self) -> u64 {
 		self.total_gets
 	}
 
 	/// Returns the cache's total number of sets.
 	#[must_use]
-	pub fn get_total_sets(&self) -> u64 {
+	pub fn total_sets(&self) -> u64 {
 		self.total_sets
 	}
 
 	/// Returns the cache's total number of dels.
 	#[must_use]
-	pub fn get_total_dels(&self) -> u64 {
+	pub fn total_dels(&self) -> u64 {
 		self.total_dels
 	}
 
 	/// Returns the cache's current miss ratio.
 	#[must_use]
-	pub fn get_miss_ratio(&self) -> f64 {
+	pub fn miss_ratio(&self) -> f64 {
 		if self.total_gets == 0 {
 			return 1.0;
 		}
@@ -106,13 +136,13 @@ impl Status {
 
 	/// Returns the cache's configured eviction policies.
 	#[must_use]
-	pub fn get_policies(&self) -> &[PaperPolicy] {
+	pub fn policies(&self) -> &[PaperPolicy] {
 		&self.policies
 	}
 
 	/// Returns the cache's current eviction policy.
 	#[must_use]
-	pub fn get_policy(&self) -> PaperPolicy {
+	pub fn policy(&self) -> PaperPolicy {
 		self.policy
 	}
 
@@ -125,7 +155,7 @@ impl Status {
 
 	/// Returns the cache's current uptime.
 	#[must_use]
-	pub fn get_uptime(&self) -> u64 {
+	pub fn uptime(&self) -> u64 {
 		time::timestamp() - self.start_time
 	}
 }
@@ -168,12 +198,12 @@ impl AtomicStatus {
 	}
 
 	#[must_use]
-	pub fn get_max_size(&self) -> CacheSize {
+	pub fn max_size(&self) -> CacheSize {
 		self.max_size.load(Ordering::Relaxed)
 	}
 
 	#[must_use]
-	pub fn get_used_size(&self, policy: &PaperPolicy) -> CacheSize {
+	pub fn used_size(&self, policy: &PaperPolicy) -> CacheSize {
 		let base_used_size = self.base_used_size.load(Ordering::Acquire);
 		let num_objects = self.num_objects.load(Ordering::Acquire);
 		let policy_overhead = get_policy_overhead(policy);
@@ -182,12 +212,12 @@ impl AtomicStatus {
 	}
 
 	#[must_use]
-	pub fn get_policies(&self) -> &[PaperPolicy] {
+	pub fn policies(&self) -> &[PaperPolicy] {
 		&self.policies
 	}
 
 	#[must_use]
-	pub fn get_policy(&self) -> PaperPolicy {
+	pub fn policy(&self) -> PaperPolicy {
 		let policy_index = self.policy_index.load(Ordering::Relaxed);
 		self.policies[policy_index]
 	}
@@ -276,14 +306,18 @@ impl AtomicStatus {
 		self.total_dels.store(0, Ordering::Relaxed);
 	}
 
-	#[must_use]
-	pub fn to_status(&self) -> Status {
-		let policy = self.get_policy();
+	pub fn try_to_status(&self) -> Result<Status, CacheError> {
+		let policy = self.policy();
 
-		Status {
-			max_size: self.get_max_size(),
-			used_size: self.get_used_size(&policy),
+		let status = Status {
+			pid: process::id(),
+
+			max_size: self.max_size(),
+			used_size: self.used_size(&policy),
 			num_objects: self.num_objects.load(Ordering::Acquire),
+
+			rss: mem::rss(None).map_err(|_| CacheError::Internal)?,
+			hwm: mem::hwm(None).map_err(|_| CacheError::Internal)?,
 
 			total_hits: self.total_hits.load(Ordering::Relaxed),
 			total_gets: self.total_gets.load(Ordering::Relaxed),
@@ -295,7 +329,9 @@ impl AtomicStatus {
 			is_auto_policy: self.is_auto_policy.load(Ordering::Relaxed),
 
 			start_time: self.start_time.load(Ordering::Relaxed),
-		}
+		};
+
+		Ok(status)
 	}
 }
 

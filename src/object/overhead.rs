@@ -50,7 +50,7 @@ impl OverheadManager {
 		K: TypeSize,
 		V: TypeSize,
 	{
-		let policy = self.status.get_policy();
+		let policy = self.status.policy();
 		self.base_size(object) + get_policy_overhead(&policy)
 	}
 }

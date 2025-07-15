@@ -157,14 +157,14 @@ where
 		status: StatusRef,
 		overhead_manager: OverheadManagerRef,
 	) -> Result<Self, CacheError> {
-		let max_cache_size = status.get_max_size();
+		let max_cache_size = status.max_size();
 
 		let mini_stacks = MiniStackManager::new(
-			status.get_policies(),
+			status.policies(),
 			max_cache_size,
 		);
 
-		let policy = status.get_policy();
+		let policy = status.policy();
 		let policy_stack = init_policy_stack(policy, max_cache_size);
 
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
@@ -178,7 +178,7 @@ where
 		// we need the initial size so we can accurately reconstruct the
 		// policy stacks after the cache is resized
 		trace_worker
-			.send(StackEvent::Resize(status.get_max_size()))
+			.send(StackEvent::Resize(status.max_size()))
 			.map_err(|_| CacheError::Internal)?;
 
 		let worker = PolicyWorker {
@@ -258,7 +258,7 @@ where
 		self.policy_stack = None;
 		self.mini_index = Some(mini_index);
 
-		let max_cache_size = self.status.get_max_size();
+		let max_cache_size = self.status.max_size();
 		let current_policy = self.current_policy.clone();
 		let trace_fragments = self.trace_fragments.clone();
 
@@ -351,9 +351,9 @@ where
 		}
 
 		let policy = self.current_policy.read();
-		let max_cache_size = self.status.get_max_size();
+		let max_cache_size = self.status.max_size();
 
-		while self.status.get_used_size(&policy) > max_cache_size {
+		while self.status.used_size(&policy) > max_cache_size {
 			let maybe_key = self.policy_stack
 				.as_mut()
 				.ok_or(CacheError::Internal)?
@@ -382,11 +382,11 @@ where
 		mini_index: usize,
 		buffered_events: &mut Vec<StackEvent>,
 	) {
-		let max_cache_size = self.status.get_max_size();
+		let max_cache_size = self.status.max_size();
 		let policy = self.current_policy.read();
 		let mut evictions = Vec::<HashedKey>::new();
 
-		while self.status.get_used_size(&policy) > max_cache_size {
+		while self.status.used_size(&policy) > max_cache_size {
 			let maybe_key = self.mini_stack_manager
 				.get_eviction(mini_index)
 				.map(|key| EraseKey::Hashed(key));
