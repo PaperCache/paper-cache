@@ -13,19 +13,19 @@ use std::{
 use typesize::TypeSize;
 
 use crate::{
-	StatsRef,
+	StatusRef,
 	policy::PaperPolicy,
 	object::{Object, ObjectSize},
 };
 
 pub struct OverheadManager {
-	stats: StatsRef,
+	status: StatusRef,
 }
 
 impl OverheadManager {
-	pub fn new(stats: &StatsRef) -> Self {
+	pub fn new(status: &StatusRef) -> Self {
 		OverheadManager {
-			stats: stats.clone(),
+			status: status.clone(),
 		}
 	}
 
@@ -50,7 +50,7 @@ impl OverheadManager {
 		K: TypeSize,
 		V: TypeSize,
 	{
-		let policy = self.stats.get_policy();
+		let policy = self.status.get_policy();
 		self.base_size(object) + get_policy_overhead(&policy)
 	}
 }

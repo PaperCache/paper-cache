@@ -11,7 +11,7 @@ use crossbeam_channel::unbounded;
 
 use crate::{
 	ObjectMapRef,
-	StatsRef,
+	StatusRef,
 	OverheadManagerRef,
 	error::CacheError,
 	worker::{
@@ -48,7 +48,7 @@ impl WorkerManager {
 	pub fn new<K, V>(
 		listener: WorkerReceiver,
 		objects: &ObjectMapRef<K, V>,
-		stats: &StatsRef,
+		status: &StatusRef,
 		overhead_manager: &OverheadManagerRef,
 	) -> Result<Self, CacheError>
 	where
@@ -61,14 +61,14 @@ impl WorkerManager {
 		register_worker(PolicyWorker::<K, V>::new(
 			policy_listener,
 			objects.clone(),
-			stats.clone(),
+			status.clone(),
 			overhead_manager.clone(),
 		)?);
 
 		register_worker(TtlWorker::<K, V>::new(
 			ttl_listener,
 			objects.clone(),
-			stats.clone(),
+			status.clone(),
 			overhead_manager.clone(),
 		));
 

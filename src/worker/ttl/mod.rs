@@ -16,7 +16,7 @@ use typesize::TypeSize;
 
 use crate::{
 	ObjectMapRef,
-	StatsRef,
+	StatusRef,
 	OverheadManagerRef,
 	EraseKey,
 	erase,
@@ -33,7 +33,7 @@ pub struct TtlWorker<K, V> {
 	listener: WorkerReceiver,
 
 	objects: ObjectMapRef<K, V>,
-	stats: StatsRef,
+	status: StatusRef,
 	overhead_manager: OverheadManagerRef,
 
 	expiries: Expiries,
@@ -75,7 +75,7 @@ where
 			while let Some(key) = self.expiries.pop_expired(now) {
 				erase(
 					&self.objects,
-					&self.stats,
+					&self.status,
 					&self.overhead_manager,
 					Some(EraseKey::Hashed(key)),
 				).ok();
@@ -95,14 +95,14 @@ impl<K, V> TtlWorker<K, V> {
 	pub fn new(
 		listener: WorkerReceiver,
 		objects: ObjectMapRef<K, V>,
-		stats: StatsRef,
+		status: StatusRef,
 		overhead_manager: OverheadManagerRef,
 	) -> Self {
 		TtlWorker {
 			listener,
 
 			objects,
-			stats,
+			status,
 			overhead_manager,
 
 			expiries: Expiries::default(),

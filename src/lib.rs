@@ -9,7 +9,7 @@ mod error;
 mod worker;
 mod object;
 mod policy;
-mod stats;
+mod status;
 
 use std::{
 	thread,
@@ -41,7 +41,7 @@ use kwik::{
 };
 
 use crate::{
-	stats::{AtomicStats, Stats},
+	status::{AtomicStatus, Status},
 	object::{
 		Object,
 		ObjectSize,
@@ -67,12 +67,12 @@ pub type HashedKey = u64;
 pub type NoHasher = BuildHasherDefault<NoHashHasher<HashedKey>>;
 
 pub type ObjectMapRef<K, V> = Arc<DashMap<HashedKey, Object<K, V>, NoHasher>>;
-pub type StatsRef = Arc<AtomicStats>;
+pub type StatusRef = Arc<AtomicStatus>;
 pub type OverheadManagerRef = Arc<OverheadManager>;
 
 pub struct PaperCache<K, V, S = RandomState> {
 	objects: ObjectMapRef<K, V>,
-	stats: StatsRef,
+	status: StatusRef,
 
 	worker_manager: Arc<WorkerSender>,
 	overhead_manager: OverheadManagerRef,
@@ -187,15 +187,15 @@ where
 		}
 
 		let objects = Arc::new(DashMap::with_hasher(NoHasher::default()));
-		let stats = Arc::new(AtomicStats::new(max_size, policies, policy)?);
-		let overhead_manager = Arc::new(OverheadManager::new(&stats));
+		let status = Arc::new(AtomicStatus::new(max_size, policies, policy)?);
+		let overhead_manager = Arc::new(OverheadManager::new(&status));
 
 		let (worker_sender, worker_listener) = unbounded();
 
 		let mut worker_manager = WorkerManager::new(
 			worker_listener,
 			&objects,
-			&stats,
+			&status,
 			&overhead_manager,
 		)?;
 
@@ -203,7 +203,7 @@ where
 
 		let cache = PaperCache {
 			objects,
-			stats,
+			status,
 
 			worker_manager: Arc::new(worker_sender),
 			overhead_manager,
@@ -247,11 +247,11 @@ where
 	///
 	/// cache.set(0, 0, None);
 	///
-	/// assert!(cache.stats().get_used_size() > 0);
+	/// assert!(cache.status().get_used_size() > 0);
 	/// ```
 	#[must_use]
-	pub fn stats(&self) -> Stats {
-		self.stats.to_stats()
+	pub fn status(&self) -> Status {
+		self.status.to_status()
 	}
 
 	/// Gets the value associated with the supplied key.
@@ -279,12 +279,12 @@ where
 
 		let result = match self.objects.get(&hashed_key) {
 			Some(object) if object.key_matches(key) && !object.is_expired() => {
-				self.stats.incr_hits();
+				self.status.incr_hits();
 				Ok(object.data())
 			},
 
 			_ => {
-				self.stats.incr_misses();
+				self.status.incr_misses();
 				Err(CacheError::KeyNotFound)
 			},
 		};
@@ -324,11 +324,11 @@ where
 			return Err(CacheError::ZeroValueSize);
 		}
 
-		if self.stats.exceeds_max_size(base_size) {
+		if self.status.exceeds_max_size(base_size) {
 			return Err(CacheError::ExceedingValueSize);
 		}
 
-		self.stats.incr_sets();
+		self.status.incr_sets();
 
 		let old_object_info = self.objects
 			.insert(hashed_key, object)
@@ -343,11 +343,11 @@ where
 			base_size as i64 - old_object_size as i64
 		} else {
 			// the object is new, so increase the number of objects count
-			self.stats.incr_num_objects();
+			self.status.incr_num_objects();
 			base_size as i64
 		};
 
-		self.stats.update_base_used_size(base_size_delta);
+		self.status.update_base_used_size(base_size_delta);
 		self.broadcast(WorkerEvent::Set(hashed_key, base_size, expiry, old_object_info))?;
 
 		Ok(())
@@ -377,12 +377,12 @@ where
 
 		let (removed_hashed_key, object) = erase(
 			&self.objects,
-			&self.stats,
+			&self.status,
 			&self.overhead_manager,
 			Some(EraseKey::Original(key, hashed_key)),
 		)?;
 
-		self.stats.incr_dels();
+		self.status.incr_dels();
 		self.broadcast(WorkerEvent::Del(removed_hashed_key, object.expiry()))?;
 
 		Ok(())
@@ -485,7 +485,7 @@ where
 		let new_expiry = object.expiry();
 		let new_base_size = self.overhead_manager.base_size(&object);
 
-		self.stats.update_base_used_size(new_base_size as i64 - old_base_size as i64);
+		self.status.update_base_used_size(new_base_size as i64 - old_base_size as i64);
 		self.broadcast(WorkerEvent::Ttl(hashed_key, old_expiry, new_expiry))?;
 
 		Ok(())
@@ -541,7 +541,7 @@ where
 		info!("Wiping cache");
 
 		self.objects.clear();
-		self.stats.clear();
+		self.status.clear();
 
 		self.broadcast(WorkerEvent::Wipe)?;
 
@@ -571,7 +571,7 @@ where
 			return Err(CacheError::ZeroCacheSize);
 		}
 
-		let current_max_size = self.stats.get_max_size();
+		let current_max_size = self.status.get_max_size();
 
 		if max_size == current_max_size {
 			return Ok(());
@@ -583,7 +583,7 @@ where
 			fmt::memory(max_size, Some(2)),
 		);
 
-		self.stats.set_max_size(max_size);
+		self.status.set_max_size(max_size);
 		self.broadcast(WorkerEvent::Resize(max_size))?;
 
 		Ok(())
@@ -605,11 +605,11 @@ where
 	/// assert!(cache.policy(PaperPolicy::Lru).is_err());
 	/// ```
 	pub fn policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
-		if !policy.is_auto() && !self.stats.get_policies().contains(&policy) {
+		if !policy.is_auto() && !self.status.get_policies().contains(&policy) {
 			return Err(CacheError::UnconfiguredPolicy);
 		}
 
-		self.stats.set_policy(policy)?;
+		self.status.set_policy(policy)?;
 		self.broadcast(WorkerEvent::Policy(policy))?;
 
 		Ok(())
@@ -635,7 +635,7 @@ pub enum EraseKey<'a, K> {
 
 pub fn erase<K, V>(
 	objects: &ObjectMapRef<K, V>,
-	stats: &StatsRef,
+	status: &StatusRef,
 	overhead_manager: &OverheadManagerRef,
 	maybe_key: Option<EraseKey<K>>,
 ) -> Result<(HashedKey, Object<K, V>), CacheError>
@@ -674,8 +674,8 @@ where
 	let object = entry.remove();
 	let base_size = overhead_manager.base_size(&object) as i64;
 
-	stats.update_base_used_size(-base_size);
-	stats.decr_num_objects();
+	status.update_base_used_size(-base_size);
+	status.decr_num_objects();
 
 	match !object.is_expired() {
 		true => Ok((hashed_key, object)),
@@ -698,11 +698,11 @@ mod tests {
 	}
 
 	#[test]
-	fn it_returns_stats() {
+	fn it_returns_status() {
 		let cache = init_test_cache();
-		let stats = cache.stats();
+		let status = cache.status();
 
-		assert_eq!(stats.get_max_size(), TEST_CACHE_MAX_SIZE);
+		assert_eq!(status.get_max_size(), TEST_CACHE_MAX_SIZE);
 	}
 
 	#[test]
@@ -731,8 +731,8 @@ mod tests {
 		assert!(cache.get(&0).is_ok());
 		assert!(cache.get(&1).is_err());
 
-		let stats = cache.stats();
-		assert_eq!(stats.get_miss_ratio(), 0.25);
+		let status = cache.status();
+		assert_eq!(status.get_miss_ratio(), 0.25);
 	}
 
 	#[test]
@@ -1018,7 +1018,7 @@ mod tests {
 	}
 
 	#[test]
-	fn stats_show_correct_used_size() {
+	fn status_shows_correct_used_size() {
 		use std::mem;
 
 		use crate::object::{
@@ -1036,12 +1036,12 @@ mod tests {
 		assert!(cache.set(0, 1, None).is_ok());
 		assert!(cache.set(1, 1, Some(1)).is_ok());
 
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), expected as u64);
 	}
 
 	#[test]
-	fn stats_show_correct_used_size_after_policy_switch() {
+	fn status_shows_correct_used_size_after_policy_switch() {
 		use std::mem;
 
 		use crate::object::{
@@ -1060,16 +1060,16 @@ mod tests {
 		let lru_expected = base_expected + get_policy_overhead(&PaperPolicy::Lru);
 
 		assert!(cache.set(0, 1, None).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), lfu_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), lfu_expected as u64);
 
 		assert!(cache.policy(PaperPolicy::Lru).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), lru_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), lru_expected as u64);
 	}
 
 	#[test]
-	fn stats_show_correct_used_size_after_set_ttl() {
+	fn status_shows_correct_used_size_after_set_ttl() {
 		use std::mem;
 
 		use crate::object::{
@@ -1086,16 +1086,16 @@ mod tests {
 		let post_expected = pre_expected + get_ttl_overhead();
 
 		assert!(cache.set(0, 1, None).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), pre_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), pre_expected as u64);
 
 		assert!(cache.ttl(&0, Some(1)).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), post_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), post_expected as u64);
 	}
 
 	#[test]
-	fn stats_show_correct_used_size_after_unset_ttl() {
+	fn status_shows_correct_used_size_after_unset_ttl() {
 		use std::mem;
 
 		use crate::object::{
@@ -1113,12 +1113,12 @@ mod tests {
 		let post_expected = pre_expected - get_ttl_overhead();
 
 		assert!(cache.set(0, 1, Some(1)).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), pre_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), pre_expected as u64);
 
 		assert!(cache.ttl(&0, None).is_ok());
-		let stats = cache.stats();
-		assert_eq!(stats.get_used_size(), post_expected as u64);
+		let status = cache.status();
+		assert_eq!(status.get_used_size(), post_expected as u64);
 	}
 
 	fn init_test_cache() -> PaperCache<u32, u32> {

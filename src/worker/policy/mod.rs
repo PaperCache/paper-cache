@@ -28,7 +28,7 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	ObjectMapRef,
-	StatsRef,
+	StatusRef,
 	OverheadManagerRef,
 	EraseKey,
 	erase,
@@ -61,7 +61,7 @@ pub struct PolicyWorker<K, V> {
 	listener: Receiver<WorkerEvent>,
 
 	objects: ObjectMapRef<K, V>,
-	stats: StatsRef,
+	status: StatusRef,
 	overhead_manager: OverheadManagerRef,
 
 	policy_stack: Option<Box<dyn PolicyStack>>,
@@ -137,7 +137,7 @@ where
 			let now = Instant::now();
 
 			if let Some(policy) = self.perform_auto_policy(now, has_current_set) {
-				self.stats.set_auto_policy(policy)?;
+				self.status.set_auto_policy(policy)?;
 				self.handle_policy(policy, policy_reconstruct_tx.clone());
 			}
 
@@ -154,17 +154,17 @@ where
 	pub fn new(
 		listener: WorkerReceiver,
 		objects: ObjectMapRef<K, V>,
-		stats: StatsRef,
+		status: StatusRef,
 		overhead_manager: OverheadManagerRef,
 	) -> Result<Self, CacheError> {
-		let max_cache_size = stats.get_max_size();
+		let max_cache_size = status.get_max_size();
 
 		let mini_stacks = MiniStackManager::new(
-			stats.get_policies(),
+			status.get_policies(),
 			max_cache_size,
 		);
 
-		let policy = stats.get_policy();
+		let policy = status.get_policy();
 		let policy_stack = init_policy_stack(policy, max_cache_size);
 
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
@@ -178,14 +178,14 @@ where
 		// we need the initial size so we can accurately reconstruct the
 		// policy stacks after the cache is resized
 		trace_worker
-			.send(StackEvent::Resize(stats.get_max_size()))
+			.send(StackEvent::Resize(status.get_max_size()))
 			.map_err(|_| CacheError::Internal)?;
 
 		let worker = PolicyWorker {
 			listener,
 
 			objects,
-			stats,
+			status,
 			overhead_manager,
 
 			policy_stack: Some(policy_stack),
@@ -258,7 +258,7 @@ where
 		self.policy_stack = None;
 		self.mini_index = Some(mini_index);
 
-		let max_cache_size = self.stats.get_max_size();
+		let max_cache_size = self.status.get_max_size();
 		let current_policy = self.current_policy.clone();
 		let trace_fragments = self.trace_fragments.clone();
 
@@ -351,9 +351,9 @@ where
 		}
 
 		let policy = self.current_policy.read();
-		let max_cache_size = self.stats.get_max_size();
+		let max_cache_size = self.status.get_max_size();
 
-		while self.stats.get_used_size(&policy) > max_cache_size {
+		while self.status.get_used_size(&policy) > max_cache_size {
 			let maybe_key = self.policy_stack
 				.as_mut()
 				.ok_or(CacheError::Internal)?
@@ -362,7 +362,7 @@ where
 
 			let erase_result = erase(
 				&self.objects,
-				&self.stats,
+				&self.status,
 				&self.overhead_manager,
 				maybe_key,
 			);
@@ -382,18 +382,18 @@ where
 		mini_index: usize,
 		buffered_events: &mut Vec<StackEvent>,
 	) {
-		let max_cache_size = self.stats.get_max_size();
+		let max_cache_size = self.status.get_max_size();
 		let policy = self.current_policy.read();
 		let mut evictions = Vec::<HashedKey>::new();
 
-		while self.stats.get_used_size(&policy) > max_cache_size {
+		while self.status.get_used_size(&policy) > max_cache_size {
 			let maybe_key = self.mini_stack_manager
 				.get_eviction(mini_index)
 				.map(|key| EraseKey::Hashed(key));
 
 			let erase_result = erase(
 				&self.objects,
-				&self.stats,
+				&self.status,
 				&self.overhead_manager,
 				maybe_key,
 			);
@@ -410,7 +410,7 @@ where
 	}
 
 	fn perform_auto_policy(&mut self, now: Instant, has_current_set: bool) -> Option<PaperPolicy> {
-		if has_current_set || !self.stats.is_auto_policy() || self.mini_index.is_some() {
+		if has_current_set || !self.status.is_auto_policy() || self.mini_index.is_some() {
 			// don't switch the policy while (any of):
 			// * there is recent set activity
 			// * the auto policy is not configured

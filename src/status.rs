@@ -22,7 +22,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Stats {
+pub struct Status {
 	max_size: CacheSize,
 	used_size: CacheSize,
 	num_objects: u64,
@@ -39,7 +39,7 @@ pub struct Stats {
 	start_time: u64,
 }
 
-pub struct AtomicStats {
+pub struct AtomicStatus {
 	max_size: AtomicCacheSize,
 	base_used_size: AtomicCacheSize,
 	num_objects: AtomicU64,
@@ -57,7 +57,7 @@ pub struct AtomicStats {
 }
 
 /// This struct holds the basic statistical information about `PaperCache`.
-impl Stats {
+impl Status {
 	/// Returns the cache's maximum size.
 	#[must_use]
 	pub fn get_max_size(&self) -> CacheSize {
@@ -132,7 +132,7 @@ impl Stats {
 
 /// This struct holds the basic statistical information about `PaperCache`
 /// and allows for atomic updates of its fields.
-impl AtomicStats {
+impl AtomicStatus {
 	pub fn new(
 		max_size: CacheSize,
 		policies: &[PaperPolicy],
@@ -147,7 +147,7 @@ impl AtomicStats {
 
 		let policy_index = get_policy_index(&policies, policy)?;
 
-		let stats = AtomicStats {
+		let status = AtomicStatus {
 			max_size: AtomicCacheSize::new(max_size),
 			base_used_size: AtomicCacheSize::default(),
 			num_objects: AtomicU64::default(),
@@ -164,7 +164,7 @@ impl AtomicStats {
 			start_time: AtomicU64::new(time::timestamp()),
 		};
 
-		Ok(stats)
+		Ok(status)
 	}
 
 	#[must_use]
@@ -277,10 +277,10 @@ impl AtomicStats {
 	}
 
 	#[must_use]
-	pub fn to_stats(&self) -> Stats {
+	pub fn to_status(&self) -> Status {
 		let policy = self.get_policy();
 
-		Stats {
+		Status {
 			max_size: self.get_max_size(),
 			used_size: self.get_used_size(&policy),
 			num_objects: self.num_objects.load(Ordering::Acquire),
@@ -315,37 +315,37 @@ mod tests {
 
 	use crate::{
 		PaperPolicy,
-		stats::AtomicStats,
+		status::AtomicStatus,
 	};
 
 	#[test]
-	fn it_clears_atomic_stats() {
-		let stats = AtomicStats::new(
+	fn it_clears_atomic_status() {
+		let status = AtomicStatus::new(
 			1000,
 			&[PaperPolicy::Lfu],
 			PaperPolicy::Lfu,
-		).expect("Could not initialize atomic stats.");
+		).expect("Could not initialize atomic status.");
 
-		stats.update_base_used_size(1);
-		stats.incr_num_objects();
-		stats.incr_hits();
-		stats.incr_sets();
-		stats.incr_dels();
+		status.update_base_used_size(1);
+		status.incr_num_objects();
+		status.incr_hits();
+		status.incr_sets();
+		status.incr_dels();
 
-		assert_eq!(stats.base_used_size.load(Ordering::Acquire), 1);
-		assert_eq!(stats.num_objects.load(Ordering::Acquire), 1);
-		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 1);
-		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 1);
-		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 1);
-		assert_eq!(stats.total_dels.load(Ordering::Relaxed), 1);
+		assert_eq!(status.base_used_size.load(Ordering::Acquire), 1);
+		assert_eq!(status.num_objects.load(Ordering::Acquire), 1);
+		assert_eq!(status.total_gets.load(Ordering::Relaxed), 1);
+		assert_eq!(status.total_hits.load(Ordering::Relaxed), 1);
+		assert_eq!(status.total_sets.load(Ordering::Relaxed), 1);
+		assert_eq!(status.total_dels.load(Ordering::Relaxed), 1);
 
-		stats.clear();
+		status.clear();
 
-		assert_eq!(stats.base_used_size.load(Ordering::Acquire), 0);
-		assert_eq!(stats.num_objects.load(Ordering::Acquire), 0);
-		assert_eq!(stats.total_gets.load(Ordering::Relaxed), 0);
-		assert_eq!(stats.total_hits.load(Ordering::Relaxed), 0);
-		assert_eq!(stats.total_sets.load(Ordering::Relaxed), 0);
-		assert_eq!(stats.total_dels.load(Ordering::Relaxed), 0);
+		assert_eq!(status.base_used_size.load(Ordering::Acquire), 0);
+		assert_eq!(status.num_objects.load(Ordering::Acquire), 0);
+		assert_eq!(status.total_gets.load(Ordering::Relaxed), 0);
+		assert_eq!(status.total_hits.load(Ordering::Relaxed), 0);
+		assert_eq!(status.total_sets.load(Ordering::Relaxed), 0);
+		assert_eq!(status.total_dels.load(Ordering::Relaxed), 0);
 	}
 }
