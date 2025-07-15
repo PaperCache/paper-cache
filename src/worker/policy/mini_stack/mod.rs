@@ -64,6 +64,10 @@ impl MiniStack {
 		self.update(key);
 	}
 
+	pub fn clear_counters(&mut self) {
+		self.hits = 0;
+	}
+
 	fn reduce(&mut self, target_size: CacheSize) {
 		while self.used_size > target_size {
 			let maybe_object_size = self.stack

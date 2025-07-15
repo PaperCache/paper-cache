@@ -115,7 +115,7 @@ impl MiniStackManager {
 			});
 	}
 
-	pub fn get_optimal_policy(&self, current_policy: &PaperPolicy) -> Option<PaperPolicy> {
+	pub fn get_optimal_policy(&mut self, current_policy: &PaperPolicy) -> Option<PaperPolicy> {
 		let sampling_ratio = MINI_SAMPLING_THRESHOLD as f64 / MINI_SAMPLING_MODULUS as f64;
 		let expected_count = self.total_gets as f64 * sampling_ratio;
 
@@ -146,13 +146,28 @@ impl MiniStackManager {
 				}
 			})?;
 
-		if optimal_mini_stack.miss_ratio(expected_count) < current_miss_ratio {
+		let optimal_miss_ratio = optimal_mini_stack.miss_ratio(expected_count);
+
+		let maybe_optimal_policy = if optimal_miss_ratio < current_miss_ratio {
 			// make sure we only switch to a different policy that performs better
 			// than the current policy
 			Some(optimal_mini_stack.policy())
 		} else {
 			None
-		}
+		};
+
+		// clear the miss ratio counters each epoch to only get the miss ratios
+		// of the mini stacks from the previous epoch (though this really shouldn't
+		// make too much of a difference)
+		self.clear_ministack_counters();
+
+		maybe_optimal_policy
+	}
+
+	fn clear_ministack_counters(&mut self) {
+		self.mini_stacks
+			.par_iter_mut()
+			.for_each(|mini_stack| mini_stack.clear_counters());
 	}
 }
 
