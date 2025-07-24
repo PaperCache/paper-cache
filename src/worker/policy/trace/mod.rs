@@ -16,6 +16,7 @@ use std::{
 
 use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
+use log::error;
 use kwik::file::FileWriter;
 
 use crate::{
@@ -55,14 +56,19 @@ impl Worker for TraceWorker {
 
 					if let Some(event) = TraceEvent::maybe_from_stack_event(&event) {
 						let fragments = self.trace_fragments.read();
-						let fragment = fragments.back().ok_or(CacheError::Internal)?;
+
+						let Some(fragment) = fragments.back() else {
+							error!("No trace fragment found");
+							return Err(CacheError::Internal);
+						};
 
 						let mut modifiers = fragment.lock();
 						let writer = &mut modifiers.1;
 
-						writer
-							.write_chunk(&event)
-							.map_err(|_| CacheError::Internal)?;
+						if let Err(err) = writer.write_chunk(&event) {
+							error!("Could not write to trace fragment: {err:?}");
+							return Err(CacheError::Internal);
+						}
 
 						should_flush = true;
 					}
@@ -70,14 +76,19 @@ impl Worker for TraceWorker {
 
 				if should_flush {
 					let fragments = self.trace_fragments.read();
-					let fragment = fragments.back().ok_or(CacheError::Internal)?;
+
+					let Some(fragment) = fragments.back() else {
+						error!("No trace fragment found");
+						return Err(CacheError::Internal);
+					};
 
 					let mut modifiers = fragment.lock();
 					let writer = &mut modifiers.1;
 
-					writer
-						.flush()
-						.map_err(|_| CacheError::Internal)?;
+					if let Err(err) = writer.flush() {
+						error!("Could not flush trace fragment: {err:?}");
+						return Err(CacheError::Internal);
+					}
 				}
 			}
 
@@ -119,8 +130,14 @@ impl TraceWorker {
 		}
 
 		// the latest fragment is no longer valid, so create a new one
-		let fragment = TraceFragment::new()
-			.map_err(|_| CacheError::Internal)?;
+		let fragment = match TraceFragment::new() {
+			Ok(fragment) => fragment,
+
+			Err(err) => {
+				error!("Could not create trace fragment: {err:?}");
+				return Err(CacheError::Internal);
+			},
+		};
 
 		self.trace_fragments
 			.write()

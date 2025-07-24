@@ -8,6 +8,7 @@
 use std::sync::Arc;
 use typesize::TypeSize;
 use crossbeam_channel::unbounded;
+use log::error;
 
 use crate::{
 	ObjectMapRef,
@@ -37,8 +38,10 @@ impl Worker for WorkerManager {
 			};
 
 			for worker in self.workers.iter() {
-				worker.try_send(event.clone())
-					.map_err(|_| CacheError::Internal)?;
+				if let Err(err) = worker.try_send(event.clone()) {
+					error!("Could not send event to worker: {err:?}");
+					return Err(CacheError::Internal);
+				}
 			}
 		}
 	}

@@ -14,6 +14,7 @@ use std::{
 };
 
 use num_traits::AsPrimitive;
+use log::error;
 
 use kwik::{
 	time,
@@ -282,6 +283,7 @@ impl AtomicStatus {
 
 	pub fn set_auto_policy(&self, policy: PaperPolicy) -> Result<(), CacheError> {
 		if policy.is_auto() {
+			error!("Attempting to set recursive auto policy");
 			return Err(CacheError::Internal);
 		}
 
@@ -309,6 +311,16 @@ impl AtomicStatus {
 	pub fn try_to_status(&self) -> Result<Status, CacheError> {
 		let policy = self.policy();
 
+		let Ok(rss) = mem::rss(None) else {
+			error!("Could not get RSS");
+			return Err(CacheError::Internal);
+		};
+
+		let Ok(hwm) = mem::hwm(None) else {
+			error!("Could not get HWM");
+			return Err(CacheError::Internal);
+		};
+
 		let status = Status {
 			pid: process::id(),
 
@@ -316,8 +328,8 @@ impl AtomicStatus {
 			used_size: self.used_size(&policy),
 			num_objects: self.num_objects.load(Ordering::Acquire),
 
-			rss: mem::rss(None).map_err(|_| CacheError::Internal)?,
-			hwm: mem::hwm(None).map_err(|_| CacheError::Internal)?,
+			rss,
+			hwm,
 
 			total_hits: self.total_hits.load(Ordering::Relaxed),
 			total_gets: self.total_gets.load(Ordering::Relaxed),
@@ -339,10 +351,18 @@ fn get_policy_index(
 	policies: &[PaperPolicy],
 	policy: PaperPolicy,
 ) -> Result<usize, CacheError> {
-	policies
+	let maybe_index = policies
 		.iter()
-		.position(|configured_policy| configured_policy.eq(&policy))
-		.ok_or(CacheError::Internal)
+		.position(|configured_policy| configured_policy.eq(&policy));
+
+	match maybe_index {
+		Some(index) => Ok(index),
+
+		None => {
+			error!("Could not find policy index");
+			Err(CacheError::Internal)
+		},
+	}
 }
 
 #[cfg(test)]
@@ -360,7 +380,7 @@ mod tests {
 			1000,
 			&[PaperPolicy::Lfu],
 			PaperPolicy::Lfu,
-		).expect("Could not initialize atomic status.");
+		).expect("Could not initialize atomic status");
 
 		status.update_base_used_size(1);
 		status.incr_num_objects();

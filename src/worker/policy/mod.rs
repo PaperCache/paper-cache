@@ -21,7 +21,7 @@ use std::{
 use typesize::TypeSize;
 use parking_lot::RwLock;
 use crossbeam_channel::{Sender, Receiver, unbounded};
-use log::info;
+use log::{info, warn, error};
 use kwik::fmt;
 
 use crate::{
@@ -121,9 +121,10 @@ where
 
 				if let Some(stack_event) = StackEvent::maybe_from_worker_event(&event) {
 					if self.policy_stack.is_some() {
-						self.trace_worker
-							.send(stack_event)
-							.map_err(|_| CacheError::Internal)?;
+						if let Err(err) = self.trace_worker.send(stack_event) {
+							error!("Could not send stack event to trace worker: {err:?}");
+							return Err(CacheError::Internal);
+						}
 					} else {
 						buffered_events.push(stack_event);
 					}
@@ -177,9 +178,10 @@ where
 
 		// we need the initial size so we can accurately reconstruct the
 		// policy stacks after the cache is resized
-		trace_worker
-			.send(StackEvent::Resize(status.max_size()))
-			.map_err(|_| CacheError::Internal)?;
+		if let Err(err) = trace_worker.send(StackEvent::Resize(status.max_size())) {
+			error!("Could not send initial cache size to trace worker: {err:?}");
+			return Err(CacheError::Internal);
+		}
 
 		let worker = PolicyWorker {
 			listener,
@@ -284,6 +286,8 @@ where
 					);
 
 					let _ = policy_reconstruct_tx.send(stack);
+				} else {
+					warn!("The policy changed during reconstruction");
 				}
 			}
 		});
@@ -331,9 +335,10 @@ where
 		}
 
 		for event in buffered_events.iter() {
-			self.trace_worker
-				.send(event.clone())
-				.map_err(|_| CacheError::Internal)?;
+			if let Err(err) = self.trace_worker.send(event.clone()) {
+				error!("Could not send buffered event to trace worker: {err:?}");
+				return Err(CacheError::Internal);
+			}
 		}
 
 		buffered_events.clear();
@@ -354,9 +359,12 @@ where
 		let max_cache_size = self.status.max_size();
 
 		while self.status.used_size(&policy) > max_cache_size {
-			let maybe_key = self.policy_stack
-				.as_mut()
-				.ok_or(CacheError::Internal)?
+			let Some(policy_stack) = self.policy_stack.as_mut() else {
+				error!("No active policy or mini stack");
+				return Err(CacheError::Internal);
+			};
+
+			let maybe_key = policy_stack
 				.evict_one()
 				.map(|key| EraseKey::Hashed(key));
 
@@ -459,14 +467,20 @@ fn reconstruct_policy_stack(
 		let mut fragment_modifiers = fragment.lock();
 		let fragment_reader = &mut fragment_modifiers.0;
 
-		let initial_position = fragment_reader
-			.stream_position()
-			.map_err(|_| CacheError::Internal)?;
+		let initial_position = match fragment_reader.stream_position() {
+			Ok(position) => position,
+
+			Err(err) => {
+				error!("Could not get trace fragment initial stream position: {err:?}");
+				return Err(CacheError::Internal);
+			},
+		};
 
 		// start reading the file from the beginning
-		fragment_reader
-			.rewind()
-			.map_err(|_| CacheError::Internal)?;
+		if let Err(err) = fragment_reader.rewind() {
+			error!("Could not rewind trace fragment: {err:?}");
+			return Err(CacheError::Internal);
+		}
 
 		for (index, event) in fragment_reader.iter().enumerate() {
 			if index & (RECONSTRUCT_POLICY_POLLING - 1) == 0 && policy != *current_policy.read() {
@@ -474,9 +488,9 @@ fn reconstruct_policy_stack(
 				// configured policy is still the policy we're reconstructing and
 				// if it's not, move the reader back to its original position in
 				// the file and terminate the reconstruction
-				fragment_reader
-					.seek(SeekFrom::Start(initial_position))
-					.map_err(|_| CacheError::Internal)?;
+				if let Err(err) = fragment_reader.seek(SeekFrom::Start(initial_position)) {
+					error!("Could not seek within trace fragment: {err:?}");
+				}
 
 				return Err(CacheError::Internal);
 			}
@@ -492,9 +506,10 @@ fn reconstruct_policy_stack(
 		// ensure the underlying trace fragment is returned back to its original
 		// position (this is mostly just a sanity check as reading the file should
 		// already return it to the end which should be the orignal position)
-		fragment_reader
-			.seek(SeekFrom::Start(initial_position))
-			.map_err(|_| CacheError::Internal)?;
+		if let Err(err) = fragment_reader.seek(SeekFrom::Start(initial_position)) {
+			error!("Could not seek within trace fragment: {err:?}");
+			return Err(CacheError::Internal);
+		}
 	}
 
 	Ok(stack)
