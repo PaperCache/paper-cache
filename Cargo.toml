@@ -1,6 +1,6 @@
 [package]
 name = "paper-cache"
-version = "1.11.11"
+version = "1.11.12"
 edition = "2024"
 license = "AGPL-3.0"
 description = "An in-memory cache with dynamic eviction policies."
@@ -12,16 +12,16 @@ categories = ["caching"]
 
 [dependencies]
 dlv-list = "0.6.0"
-kwik = "1.18.6"
-thiserror = "2.0.12"
+kwik = "1.18.7"
+thiserror = "2.0.16"
 dashmap = "6.1.0"
 crossbeam-channel = "0.5.15"
 typesize = "0.1.14"
 byteorder = "1.5.0"
-tempfile = "3.20.0"
+tempfile = "3.21.0"
 parking_lot = "0.12.4"
-log = "0.4.27"
+log = "0.4.28"
 nohash-hasher = "0.2.0"
 serde = { version = "1.0.219", features = ["derive"] }
-rayon = "1.10.0"
+rayon = "1.11.0"
 num-traits = "0.2.19"
