@@ -5,17 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::{
-	mem,
-	time::Instant,
-};
+use std::{mem, time::Instant};
 
 use typesize::TypeSize;
 
 use crate::{
 	StatusRef,
-	policy::PaperPolicy,
 	object::{Object, ObjectSize},
+	policy::PaperPolicy,
 };
 
 pub struct OverheadManager {
@@ -44,7 +41,8 @@ impl OverheadManager {
 		total_size
 	}
 
-	/// Returns the size of the object including base and policy-related overheads.
+	/// Returns the size of the object including base and policy-related
+	/// overheads.
 	pub fn total_size<K, V>(&self, object: &Object<K, V>) -> ObjectSize
 	where
 		K: TypeSize,

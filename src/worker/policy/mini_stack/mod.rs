@@ -13,8 +13,8 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::{PolicyStack, init_policy_stack},
 };
 
@@ -24,7 +24,7 @@ pub struct MiniStack {
 
 	policy: PaperPolicy,
 
-	max_size: CacheSize,
+	max_size:  CacheSize,
 	used_size: CacheSize,
 
 	hits: u64,
@@ -70,7 +70,8 @@ impl MiniStack {
 
 	fn reduce(&mut self, target_size: CacheSize) {
 		while self.used_size > target_size {
-			let maybe_object_size = self.stack
+			let maybe_object_size = self
+				.stack
 				.evict_one()
 				.and_then(|evict_key| self.sizes.remove(&evict_key));
 
@@ -153,10 +154,7 @@ mod tests {
 	fn used_size_after_reinsert_is_correct() {
 		use crate::{
 			PaperPolicy,
-			worker::policy::{
-				policy_stack::PolicyStack,
-				mini_stack::MiniStack,
-			},
+			worker::policy::{mini_stack::MiniStack, policy_stack::PolicyStack},
 		};
 
 		let mut mini_stack = MiniStack::new(PaperPolicy::Lfu, 100);
@@ -179,10 +177,7 @@ mod tests {
 	fn used_size_after_remove_is_correct() {
 		use crate::{
 			PaperPolicy,
-			worker::policy::{
-				policy_stack::PolicyStack,
-				mini_stack::MiniStack,
-			},
+			worker::policy::{mini_stack::MiniStack, policy_stack::PolicyStack},
 		};
 
 		let mut mini_stack = MiniStack::new(PaperPolicy::Lfu, 100);

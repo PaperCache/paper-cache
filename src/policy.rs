@@ -99,16 +99,13 @@ impl Visitor<'_> for PaperPolicyVisitor {
 	where
 		E: de::Error,
 	{
-		PaperPolicy::from_str(value)
-			.map_err(|err| E::custom(err.to_string()))
+		PaperPolicy::from_str(value).map_err(|err| E::custom(err.to_string()))
 	}
 }
 
 fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
 	// skip the "2q-"
-	let tokens = value[3..]
-		.split('-')
-		.collect::<Vec<&str>>();
+	let tokens = value[3..].split('-').collect::<Vec<&str>>();
 
 	if tokens.len() != 2 {
 		return Err(CacheError::InvalidPolicy);
@@ -122,10 +119,7 @@ fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
 		return Err(CacheError::InvalidPolicy);
 	};
 
-	if k_in + k_out > 1.0
-		|| !(0.0..=1.0).contains(&k_in)
-		|| !(0.0..=1.0).contains(&k_out)
-	{
+	if k_in + k_out > 1.0 || !(0.0..=1.0).contains(&k_in) || !(0.0..=1.0).contains(&k_out) {
 		return Err(CacheError::InvalidPolicy);
 	}
 
@@ -134,9 +128,7 @@ fn parse_two_q(value: &str) -> Result<PaperPolicy, CacheError> {
 
 fn parse_s_three_fifo(value: &str) -> Result<PaperPolicy, CacheError> {
 	// skip the "s3-fifo-"
-	let tokens = value[8..]
-		.split('-')
-		.collect::<Vec<&str>>();
+	let tokens = value[8..].split('-').collect::<Vec<&str>>();
 
 	if tokens.len() != 1 {
 		return Err(CacheError::InvalidPolicy);

@@ -10,8 +10,8 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -20,7 +20,7 @@ pub struct MruStack {
 	// we hold the MRU key separately to ensure that it isn't immediately evicted
 	// from the cache after it is first set if there are ongoing evictions.
 	maybe_mru_key: Option<HashedKey>,
-	stack: HashList<HashedKey, NoHasher>,
+	stack:         HashList<HashedKey, NoHasher>,
 }
 
 impl PolicyStack for MruStack {
@@ -39,7 +39,10 @@ impl PolicyStack for MruStack {
 	}
 
 	fn contains(&self, key: HashedKey) -> bool {
-		if self.maybe_mru_key.is_some_and(|mru_key| mru_key == key) {
+		if self
+			.maybe_mru_key
+			.is_some_and(|mru_key| mru_key == key)
+		{
 			return true;
 		}
 
@@ -61,7 +64,10 @@ impl PolicyStack for MruStack {
 	}
 
 	fn update(&mut self, key: HashedKey) {
-		if self.maybe_mru_key.is_some_and(|mru_key| mru_key == key) {
+		if self
+			.maybe_mru_key
+			.is_some_and(|mru_key| mru_key == key)
+		{
 			// the key is already the most recently used, so do nothing
 			return;
 		}
@@ -77,7 +83,10 @@ impl PolicyStack for MruStack {
 	}
 
 	fn remove(&mut self, key: HashedKey) {
-		if self.maybe_mru_key.is_some_and(|mru_key| mru_key == key) {
+		if self
+			.maybe_mru_key
+			.is_some_and(|mru_key| mru_key == key)
+		{
 			self.maybe_mru_key = self.stack.pop_front();
 			return;
 		}
@@ -101,7 +110,7 @@ impl PolicyStack for MruStack {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, MruStack};
+		use crate::worker::policy::policy_stack::{MruStack, PolicyStack};
 
 		let mut stack = MruStack::default();
 

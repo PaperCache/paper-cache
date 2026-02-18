@@ -5,15 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::{io, cmp};
-use kwik::file::binary::{SizedChunk, ReadChunk, WriteChunk};
+use std::{cmp, io};
 
-use crate::{
-	CacheSize,
-	HashedKey,
-	object::ObjectSize,
-	worker::WorkerEvent,
-};
+use kwik::file::binary::{ReadChunk, SizedChunk, WriteChunk};
+
+use crate::{CacheSize, HashedKey, object::ObjectSize, worker::WorkerEvent};
 
 #[derive(Clone)]
 pub enum StackEvent {
@@ -146,8 +142,8 @@ impl WriteChunk for TraceEvent {
 struct EventByte;
 
 impl EventByte {
-	const GET: u8		= 0;
-	const SET: u8		= 1;
-	const DEL: u8		= 2;
-	const RESIZE: u8	= 3;
+	const GET: u8 = 0;
+	const SET: u8 = 1;
+	const DEL: u8 = 2;
+	const RESIZE: u8 = 3;
 }

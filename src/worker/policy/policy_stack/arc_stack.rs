@@ -16,14 +16,14 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
 pub struct ArcStack {
 	max_size: CacheSize,
-	p: f64,
+	p:        f64,
 
 	t1: Stack,
 	t2: Stack,
@@ -34,12 +34,12 @@ pub struct ArcStack {
 
 #[derive(Default)]
 struct Stack {
-	stack: HashList<Object, NoHasher>,
+	stack:     HashList<Object, NoHasher>,
 	used_size: CacheSize,
 }
 
 struct Object {
-	key: HashedKey,
+	key:  HashedKey,
 	size: ObjectSize,
 }
 
@@ -148,9 +148,7 @@ impl PolicyStack for ArcStack {
 				self.b1.pop();
 				return self.replace();
 			} else {
-				return self.t1
-					.pop()
-					.map(|object| object.key);
+				return self.t1.pop().map(|object| object.key);
 			}
 		}
 
@@ -177,14 +175,13 @@ impl ArcStack {
 	}
 
 	fn total_used_size(&self) -> CacheSize {
-		self.t1.used_size
-			+ self.t2.used_size
-			+ self.b1.used_size
-			+ self.b2.used_size
+		self.t1.used_size + self.t2.used_size + self.b1.used_size + self.b2.used_size
 	}
 
 	fn replace(&mut self) -> Option<HashedKey> {
-		if !self.t1.stack.is_empty() && self.t1.used_size as f64 >= self.p || self.t2.stack.is_empty() {
+		if !self.t1.stack.is_empty() && self.t1.used_size as f64 >= self.p
+			|| self.t2.stack.is_empty()
+		{
 			let object = self.t1.pop()?;
 			let key = object.key;
 
@@ -214,7 +211,8 @@ impl Stack {
 		self.used_size -= object.size as CacheSize;
 		self.used_size += size as CacheSize;
 
-		self.stack.update(&key, |object| object.size = size);
+		self.stack
+			.update(&key, |object| object.size = size);
 	}
 
 	fn remove(&mut self, key: HashedKey) -> Option<Object> {
@@ -273,11 +271,13 @@ impl Eq for Object {}
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, ArcStack};
+		use crate::worker::policy::policy_stack::{ArcStack, PolicyStack};
 
 		let mut stack = ArcStack::new(4);
 
-		for access in [0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0] {
+		for access in [
+			0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0,
+		] {
 			stack.insert(access, 1);
 		}
 

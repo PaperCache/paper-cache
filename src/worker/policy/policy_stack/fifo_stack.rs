@@ -10,8 +10,8 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -58,10 +58,12 @@ impl PolicyStack for FifoStack {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, FifoStack};
+		use crate::worker::policy::policy_stack::{FifoStack, PolicyStack};
 		let mut stack = FifoStack::default();
 
-		for access in [0, 1, 1, 1, 0, 2, 3, 0, 2, 0] {
+		for access in [
+			0, 1, 1, 1, 0, 2, 3, 0, 2, 0,
+		] {
 			stack.insert(access, 1);
 		}
 

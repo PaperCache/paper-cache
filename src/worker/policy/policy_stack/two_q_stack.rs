@@ -16,29 +16,29 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
 pub struct TwoQStack {
-	k_in: f64,
+	k_in:  f64,
 	k_out: f64,
 
-	a1_in: Stack,
+	a1_in:  Stack,
 	a1_out: Stack,
-	am: Stack,
+	am:     Stack,
 }
 
 struct Stack {
 	stack: HashList<Object, NoHasher>,
 
 	used_size: CacheSize,
-	max_size: Option<CacheSize>,
+	max_size:  Option<CacheSize>,
 }
 
 struct Object {
-	key: HashedKey,
+	key:  HashedKey,
 	size: ObjectSize,
 }
 
@@ -52,9 +52,7 @@ impl PolicyStack for TwoQStack {
 	}
 
 	fn len(&self) -> usize {
-		self.a1_in.stack.len()
-			+ self.a1_out.stack.len()
-			+ self.am.stack.len()
+		self.a1_in.stack.len() + self.a1_out.stack.len() + self.am.stack.len()
 	}
 
 	fn contains(&self, key: HashedKey) -> bool {
@@ -110,9 +108,7 @@ impl PolicyStack for TwoQStack {
 			return Some(object.key);
 		}
 
-		self.am
-			.pop()
-			.map(|object| object.key)
+		self.am.pop().map(|object| object.key)
 	}
 }
 
@@ -180,7 +176,8 @@ impl Stack {
 		self.used_size -= object.size as CacheSize;
 		self.used_size += size as CacheSize;
 
-		self.stack.update(&key, |object| object.size = size);
+		self.stack
+			.update(&key, |object| object.size = size);
 	}
 
 	fn remove(&mut self, key: HashedKey) -> Option<Object> {
@@ -243,7 +240,9 @@ mod tests {
 
 		let mut stack = TwoQStack::new(0.25, 0.5, 4);
 
-		for access in [0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0] {
+		for access in [
+			0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0,
+		] {
 			stack.insert(access, 1);
 		}
 

@@ -9,32 +9,28 @@ use std::{
 	process,
 	sync::{
 		Arc,
-		atomic::{Ordering, AtomicBool, AtomicU64, AtomicUsize},
+		atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
 	},
 };
 
-use num_traits::AsPrimitive;
+use kwik::{sys::mem, time};
 use log::error;
-
-use kwik::{
-	time,
-	sys::mem,
-};
+use num_traits::AsPrimitive;
 
 use crate::{
-	CacheSize,
 	AtomicCacheSize,
+	CacheSize,
 	error::CacheError,
-	policy::PaperPolicy,
 	object::overhead::get_policy_overhead,
+	policy::PaperPolicy,
 };
 
 #[derive(Debug)]
 pub struct Status {
 	pid: u32,
 
-	max_size: CacheSize,
-	used_size: CacheSize,
+	max_size:    CacheSize,
+	used_size:   CacheSize,
 	num_objects: u64,
 
 	rss: u64,
@@ -45,25 +41,25 @@ pub struct Status {
 	total_sets: u64,
 	total_dels: u64,
 
-	policies: Arc<[PaperPolicy]>,
-	policy: PaperPolicy,
+	policies:       Arc<[PaperPolicy]>,
+	policy:         PaperPolicy,
 	is_auto_policy: bool,
 
 	start_time: u64,
 }
 
 pub struct AtomicStatus {
-	max_size: AtomicCacheSize,
+	max_size:       AtomicCacheSize,
 	base_used_size: AtomicCacheSize,
-	num_objects: AtomicU64,
+	num_objects:    AtomicU64,
 
 	total_hits: AtomicU64,
 	total_gets: AtomicU64,
 	total_sets: AtomicU64,
 	total_dels: AtomicU64,
 
-	policies: Arc<[PaperPolicy]>,
-	policy_index: AtomicUsize,
+	policies:       Arc<[PaperPolicy]>,
+	policy_index:   AtomicUsize,
 	is_auto_policy: AtomicBool,
 
 	start_time: AtomicU64,
@@ -253,9 +249,11 @@ impl AtomicStatus {
 		let delta = delta.as_();
 
 		if delta > 0 {
-			self.base_used_size.fetch_add(delta.unsigned_abs(), Ordering::AcqRel);
+			self.base_used_size
+				.fetch_add(delta.unsigned_abs(), Ordering::AcqRel);
 		} else if delta < 0 {
-			self.base_used_size.fetch_sub(delta.unsigned_abs(), Ordering::AcqRel);
+			self.base_used_size
+				.fetch_sub(delta.unsigned_abs(), Ordering::AcqRel);
 		}
 	}
 
@@ -276,7 +274,8 @@ impl AtomicStatus {
 		let index = get_policy_index(&self.policies, policy)?;
 
 		self.policy_index.store(index, Ordering::Relaxed);
-		self.is_auto_policy.store(false, Ordering::Relaxed);
+		self.is_auto_policy
+			.store(false, Ordering::Relaxed);
 
 		Ok(())
 	}
@@ -347,10 +346,7 @@ impl AtomicStatus {
 	}
 }
 
-fn get_policy_index(
-	policies: &[PaperPolicy],
-	policy: PaperPolicy,
-) -> Result<usize, CacheError> {
+fn get_policy_index(policies: &[PaperPolicy], policy: PaperPolicy) -> Result<usize, CacheError> {
 	let maybe_index = policies
 		.iter()
 		.position(|configured_policy| configured_policy.eq(&policy));
@@ -369,18 +365,12 @@ fn get_policy_index(
 mod tests {
 	use std::sync::atomic::Ordering;
 
-	use crate::{
-		PaperPolicy,
-		status::AtomicStatus,
-	};
+	use crate::{PaperPolicy, status::AtomicStatus};
 
 	#[test]
 	fn it_clears_atomic_status() {
-		let status = AtomicStatus::new(
-			1000,
-			&[PaperPolicy::Lfu],
-			PaperPolicy::Lfu,
-		).expect("Could not initialize atomic status");
+		let status = AtomicStatus::new(1000, &[PaperPolicy::Lfu], PaperPolicy::Lfu)
+			.expect("Could not initialize atomic status");
 
 		status.update_base_used_size(1);
 		status.incr_num_objects();

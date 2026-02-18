@@ -5,10 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use std::{
-	time::Instant,
-	collections::BTreeMap,
-};
+use std::{collections::BTreeMap, time::Instant};
 
 use crate::{
 	HashedKey,
@@ -42,7 +39,11 @@ impl Expiries {
 			return;
 		};
 
-		if self.map.get(&expiry).is_none_or(|got_key| *got_key != key) {
+		if self
+			.map
+			.get(&expiry)
+			.is_none_or(|got_key| *got_key != key)
+		{
 			return;
 		}
 
@@ -50,7 +51,8 @@ impl Expiries {
 	}
 
 	pub fn pop_expired(&mut self, now: Instant) -> Option<HashedKey> {
-		let first_expiry = self.map
+		let first_expiry = self
+			.map
 			.first_key_value()
 			.map(|(expiry, _)| expiry)?;
 

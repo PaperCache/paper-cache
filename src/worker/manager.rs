@@ -6,28 +6,22 @@
  */
 
 use std::sync::Arc;
-use typesize::TypeSize;
+
 use crossbeam_channel::unbounded;
 use log::error;
+use typesize::TypeSize;
 
 use crate::{
 	ObjectMapRef,
-	StatusRef,
 	OverheadManagerRef,
+	StatusRef,
 	error::CacheError,
-	worker::{
-		Worker,
-		WorkerSender,
-		WorkerReceiver,
-		PolicyWorker,
-		TtlWorker,
-		register_worker,
-	},
+	worker::{PolicyWorker, TtlWorker, Worker, WorkerReceiver, WorkerSender, register_worker},
 };
 
 pub struct WorkerManager {
 	listener: WorkerReceiver,
-	workers: Arc<Box<[WorkerSender]>>,
+	workers:  Arc<Box<[WorkerSender]>>,
 }
 
 impl Worker for WorkerManager {
@@ -75,10 +69,7 @@ impl WorkerManager {
 			overhead_manager.clone(),
 		));
 
-		let workers: Arc<Box<[WorkerSender]>> = Arc::new(Box::new([
-			policy_worker,
-			ttl_worker,
-		]));
+		let workers: Arc<Box<[WorkerSender]>> = Arc::new(Box::new([policy_worker, ttl_worker]));
 
 		let manager = WorkerManager {
 			listener,

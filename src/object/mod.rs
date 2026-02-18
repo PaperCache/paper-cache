@@ -10,7 +10,7 @@ pub mod overhead;
 use std::{
 	mem,
 	sync::Arc,
-	time::{Instant, Duration},
+	time::{Duration, Instant},
 };
 
 use typesize::TypeSize;
@@ -19,7 +19,7 @@ pub type ObjectSize = u32;
 pub type ExpireTime = Option<Instant>;
 
 pub struct Object<K, V> {
-	key: K,
+	key:  K,
 	data: Arc<V>,
 
 	expiry: ExpireTime,
@@ -56,11 +56,7 @@ impl<K, V> Object<K, V> {
 		K: TypeSize,
 		V: TypeSize,
 	{
-		(
-			self.key.get_size()
-				+ self.data.get_size()
-				+ mem::size_of::<ExpireTime>()
-		) as ObjectSize
+		(self.key.get_size() + self.data.get_size() + mem::size_of::<ExpireTime>()) as ObjectSize
 	}
 
 	pub fn expiry(&self) -> ExpireTime {
@@ -68,7 +64,8 @@ impl<K, V> Object<K, V> {
 	}
 
 	pub fn is_expired(&self) -> bool {
-		self.expiry.is_some_and(|expiry| expiry <= Instant::now())
+		self.expiry
+			.is_some_and(|expiry| expiry <= Instant::now())
 	}
 
 	pub fn expires(&mut self, ttl: Option<u32>) {

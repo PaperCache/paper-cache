@@ -9,31 +9,26 @@ mod expiries;
 
 use std::{
 	thread,
-	time::{Instant, Duration},
+	time::{Duration, Instant},
 };
 
 use typesize::TypeSize;
 
 use crate::{
-	ObjectMapRef,
-	StatusRef,
-	OverheadManagerRef,
 	EraseKey,
+	ObjectMapRef,
+	OverheadManagerRef,
+	StatusRef,
 	erase,
 	error::CacheError,
-	worker::{
-		Worker,
-		WorkerEvent,
-		WorkerReceiver,
-		ttl::expiries::Expiries,
-	},
+	worker::{Worker, WorkerEvent, WorkerReceiver, ttl::expiries::Expiries},
 };
 
 pub struct TtlWorker<K, V> {
 	listener: WorkerReceiver,
 
-	objects: ObjectMapRef<K, V>,
-	status: StatusRef,
+	objects:          ObjectMapRef<K, V>,
+	status:           StatusRef,
 	overhead_manager: OverheadManagerRef,
 
 	expiries: Expiries,
@@ -78,7 +73,8 @@ where
 					&self.status,
 					&self.overhead_manager,
 					Some(EraseKey::Hashed(key)),
-				).ok();
+				)
+				.ok();
 			}
 
 			let delay_ms = match self.expiries.has_within(2) {

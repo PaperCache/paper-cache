@@ -5,31 +5,31 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-mod lfu_stack;
-mod fifo_stack;
+mod arc_stack;
 mod clock_stack;
-mod sieve_stack;
+mod fifo_stack;
+mod lfu_stack;
 mod lru_stack;
 mod mru_stack;
-mod two_q_stack;
-mod arc_stack;
 mod s_three_fifo_stack;
+mod sieve_stack;
+mod two_q_stack;
 
 use crate::{
 	CacheSize,
 	HashedKey,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::{
-		lfu_stack::LfuStack,
-		fifo_stack::FifoStack,
+		arc_stack::ArcStack,
 		clock_stack::ClockStack,
-		sieve_stack::SieveStack,
+		fifo_stack::FifoStack,
+		lfu_stack::LfuStack,
 		lru_stack::LruStack,
 		mru_stack::MruStack,
-		two_q_stack::TwoQStack,
-		arc_stack::ArcStack,
 		s_three_fifo_stack::SThreeFifoStack,
+		sieve_stack::SieveStack,
+		two_q_stack::TwoQStack,
 	},
 };
 

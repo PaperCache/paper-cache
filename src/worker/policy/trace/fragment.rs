@@ -7,17 +7,16 @@
 
 use std::{
 	io,
-	time::{Instant, Duration},
+	time::{Duration, Instant},
 };
-
-use parking_lot::{Mutex, MutexGuard};
-use tempfile::tempfile;
 
 use kwik::file::{
 	FileReader,
 	FileWriter,
 	binary::{BinaryReader, BinaryWriter},
 };
+use parking_lot::{Mutex, MutexGuard};
+use tempfile::tempfile;
 
 use crate::worker::policy::event::TraceEvent;
 
@@ -28,7 +27,7 @@ const MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const REFRESH_AGE: Duration = Duration::from_secs(60 * 60);
 
 pub struct TraceFragment {
-	created: Instant,
+	created:   Instant,
 	modifiers: Mutex<Modifiers>,
 }
 
@@ -41,7 +40,7 @@ impl TraceFragment {
 		let writer = BinaryWriter::<TraceEvent>::from_file(writer_file)?;
 
 		let fragment = TraceFragment {
-			created: Instant::now(),
+			created:   Instant::now(),
 			modifiers: Mutex::new((reader, writer)),
 		};
 

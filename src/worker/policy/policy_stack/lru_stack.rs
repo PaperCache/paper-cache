@@ -10,8 +10,8 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -62,11 +62,13 @@ impl PolicyStack for LruStack {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, LruStack};
+		use crate::worker::policy::policy_stack::{LruStack, PolicyStack};
 
 		let mut stack = LruStack::default();
 
-		for access in [0, 1, 1, 1, 0, 2, 3, 0, 2, 0] {
+		for access in [
+			0, 1, 1, 1, 0, 2, 3, 0, 2, 0,
+		] {
 			stack.insert(access, 1);
 		}
 

@@ -6,18 +6,16 @@
  */
 
 use std::cmp::Ordering;
+
 use rayon::prelude::*;
 
 use crate::{
 	CacheSize,
 	HashedKey,
 	ObjectSize,
-	policy::PaperPolicy,
 	object::overhead::get_policy_overhead,
-	worker::policy::{
-		policy_stack::PolicyStack,
-		mini_stack::MiniStack,
-	},
+	policy::PaperPolicy,
+	worker::policy::{mini_stack::MiniStack, policy_stack::PolicyStack},
 };
 
 // the sampling modulus must be a power of 2
@@ -26,7 +24,7 @@ const MINI_SAMPLING_THRESHOLD: u64 = 16_777;
 
 pub struct MiniStackManager {
 	mini_stacks: Box<[MiniStack]>,
-	total_gets: u64,
+	total_gets:  u64,
 }
 
 impl MiniStackManager {
@@ -119,32 +117,31 @@ impl MiniStackManager {
 		let sampling_ratio = MINI_SAMPLING_THRESHOLD as f64 / MINI_SAMPLING_MODULUS as f64;
 		let expected_count = self.total_gets as f64 * sampling_ratio;
 
-		let current_miss_ratio = self.mini_stacks
-			.iter()
-			.find_map(|mini_stack| {
-				if !mini_stack.is_policy(current_policy) {
-					return None;
-				}
+		let current_miss_ratio = self.mini_stacks.iter().find_map(|mini_stack| {
+			if !mini_stack.is_policy(current_policy) {
+				return None;
+			}
 
-				Some(mini_stack.miss_ratio(expected_count))
-			})?;
+			Some(mini_stack.miss_ratio(expected_count))
+		})?;
 
-		let optimal_mini_stack = self.mini_stacks
-			.iter()
-			.min_by(|a, b| {
-				match a.miss_ratio(expected_count).total_cmp(&b.miss_ratio(expected_count)) {
-					Ordering::Equal => {
-						// the two mini stacks have the same miss ratios, so
-						// select the one with the lower memory overhead
-						let a_overhead = get_policy_overhead(&a.policy());
-						let b_overhead = get_policy_overhead(&b.policy());
+		let optimal_mini_stack = self.mini_stacks.iter().min_by(|a, b| {
+			match a
+				.miss_ratio(expected_count)
+				.total_cmp(&b.miss_ratio(expected_count))
+			{
+				Ordering::Equal => {
+					// the two mini stacks have the same miss ratios, so
+					// select the one with the lower memory overhead
+					let a_overhead = get_policy_overhead(&a.policy());
+					let b_overhead = get_policy_overhead(&b.policy());
 
-						a_overhead.cmp(&b_overhead)
-					},
+					a_overhead.cmp(&b_overhead)
+				},
 
-					cmp => cmp,
-				}
-			})?;
+				cmp => cmp,
+			}
+		})?;
 
 		let optimal_miss_ratio = optimal_mini_stack.miss_ratio(expected_count);
 

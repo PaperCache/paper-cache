@@ -15,19 +15,19 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
 #[derive(Default)]
 pub struct SieveStack {
 	stack: HashList<Object, NoHasher>,
-	hand: Option<HashedKey>,
+	hand:  Option<HashedKey>,
 }
 
 struct Object {
-	key: HashedKey,
+	key:     HashedKey,
 	visited: bool,
 }
 
@@ -59,9 +59,7 @@ impl PolicyStack for SieveStack {
 	}
 
 	fn remove(&mut self, key: HashedKey) {
-		self.hand = self.stack
-			.before(&key)
-			.map(|object| object.key);
+		self.hand = self.stack.before(&key).map(|object| object.key);
 
 		self.stack.remove(&key);
 	}
@@ -73,15 +71,11 @@ impl PolicyStack for SieveStack {
 
 	fn evict_one(&mut self) -> Option<HashedKey> {
 		loop {
-			let key = self.hand.or_else(||
-				self.stack
-					.back()
-					.map(|object| object.key)
-			)?;
+			let key = self
+				.hand
+				.or_else(|| self.stack.back().map(|object| object.key))?;
 
-			self.hand = self.stack
-				.before(&key)
-				.map(|object| object.key);
+			self.hand = self.stack.before(&key).map(|object| object.key);
 
 			let object = self.stack.get(&key)?;
 

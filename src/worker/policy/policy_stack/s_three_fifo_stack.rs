@@ -6,8 +6,8 @@
  */
 
 use std::{
-	cmp,
 	borrow::Borrow,
+	cmp,
 	hash::{Hash, Hasher},
 };
 
@@ -17,8 +17,8 @@ use crate::{
 	CacheSize,
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -26,7 +26,7 @@ pub struct SThreeFifoStack {
 	ratio: f64,
 
 	small: Stack,
-	main: Stack,
+	main:  Stack,
 	ghost: HashList<HashedKey, NoHasher>,
 }
 
@@ -34,11 +34,11 @@ struct Stack {
 	stack: HashList<Object, NoHasher>,
 
 	used_size: CacheSize,
-	max_size: Option<CacheSize>,
+	max_size:  Option<CacheSize>,
 }
 
 struct Object {
-	key: HashedKey,
+	key:  HashedKey,
 	size: ObjectSize,
 	freq: u8,
 }
@@ -78,8 +78,12 @@ impl PolicyStack for SThreeFifoStack {
 	}
 
 	fn update(&mut self, key: HashedKey) {
-		self.small.stack.update(&key, |object| object.incr_freq());
-		self.main.stack.update(&key, |object| object.incr_freq());
+		self.small
+			.stack
+			.update(&key, |object| object.incr_freq());
+		self.main
+			.stack
+			.update(&key, |object| object.incr_freq());
 	}
 
 	fn remove(&mut self, key: HashedKey) {
@@ -196,7 +200,8 @@ impl Stack {
 		self.used_size -= object.size as CacheSize;
 		self.used_size += size as CacheSize;
 
-		self.stack.update(&key, |object| object.size = size);
+		self.stack
+			.update(&key, |object| object.size = size);
 	}
 
 	fn remove(&mut self, key: HashedKey) -> Option<Object> {
@@ -265,7 +270,9 @@ mod tests {
 
 		let mut stack = SThreeFifoStack::new(0.5, 4);
 
-		for access in [0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0] {
+		for access in [
+			0, 1, 0, 2, 1, 3, 0, 4, 2, 5, 0,
+		] {
 			stack.insert(access, 1);
 		}
 

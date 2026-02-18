@@ -6,58 +6,29 @@
  */
 
 mod error;
-mod worker;
 mod object;
 mod policy;
 mod status;
+mod worker;
 
 use std::{
+	hash::{BuildHasher, BuildHasherDefault, Hash, RandomState},
+	sync::{Arc, atomic::AtomicU64},
 	thread,
-	sync::{
-		Arc,
-		atomic::AtomicU64,
-	},
-	hash::{
-		Hash,
-		RandomState,
-		BuildHasher,
-		BuildHasherDefault,
-	},
 };
 
-use dashmap::{
-	DashMap,
-	mapref::entry::Entry,
-};
-
-use typesize::TypeSize;
-use nohash_hasher::NoHashHasher;
 use crossbeam_channel::unbounded;
-use log::{info, error};
+use dashmap::{DashMap, mapref::entry::Entry};
+use kwik::{fmt, math::set::Multiset};
+use log::{error, info};
+use nohash_hasher::NoHashHasher;
+use typesize::TypeSize;
 
-use kwik::{
-	fmt,
-	math::set::Multiset,
-};
-
+pub use crate::{error::CacheError, policy::PaperPolicy};
 use crate::{
+	object::{Object, ObjectSize, overhead::OverheadManager},
 	status::{AtomicStatus, Status},
-	object::{
-		Object,
-		ObjectSize,
-		overhead::OverheadManager,
-	},
-	worker::{
-		Worker,
-		WorkerSender,
-		WorkerEvent,
-		WorkerManager,
-	},
-};
-
-pub use crate::{
-	error::CacheError,
-	policy::PaperPolicy,
+	worker::{Worker, WorkerEvent, WorkerManager, WorkerSender},
 };
 
 pub type CacheSize = u64;
@@ -72,9 +43,9 @@ pub type OverheadManagerRef = Arc<OverheadManager>;
 
 pub struct PaperCache<K, V, S = RandomState> {
 	objects: ObjectMapRef<K, V>,
-	status: StatusRef,
+	status:  StatusRef,
 
-	worker_manager: Arc<WorkerSender>,
+	worker_manager:   Arc<WorkerSender>,
 	overhead_manager: OverheadManagerRef,
 
 	hasher: S,
@@ -135,12 +106,7 @@ where
 		policies: &[PaperPolicy],
 		policy: PaperPolicy,
 	) -> Result<Self, CacheError> {
-		Self::with_hasher(
-			max_size,
-			policies,
-			policy,
-			Default::default(),
-		)
+		Self::with_hasher(max_size, policies, policy, Default::default())
 	}
 
 	/// Creates an empty `PaperCache` with the supplied hasher.
@@ -192,12 +158,8 @@ where
 
 		let (worker_sender, worker_listener) = unbounded();
 
-		let mut worker_manager = WorkerManager::new(
-			worker_listener,
-			&objects,
-			&status,
-			&overhead_manager,
-		)?;
+		let mut worker_manager =
+			WorkerManager::new(worker_listener, &objects, &status, &overhead_manager)?;
 
 		thread::spawn(move || worker_manager.run());
 
@@ -330,7 +292,8 @@ where
 
 		self.status.incr_sets();
 
-		let old_object_info = self.objects
+		let old_object_info = self
+			.objects
 			.insert(hashed_key, object)
 			.map(|old_object| {
 				let base_size = self.overhead_manager.base_size(&old_object);
@@ -348,7 +311,12 @@ where
 		};
 
 		self.status.update_base_used_size(base_size_delta);
-		self.broadcast(WorkerEvent::Set(hashed_key, base_size, expiry, old_object_info))?;
+		self.broadcast(WorkerEvent::Set(
+			hashed_key,
+			base_size,
+			expiry,
+			old_object_info,
+		))?;
 
 		Ok(())
 	}
@@ -446,8 +414,7 @@ where
 		let hashed_key = self.hash_key(key);
 
 		match self.objects.get(&hashed_key) {
-			Some(object) if object.key_matches(key) && !object.is_expired() =>
-				Ok(object.data()),
+			Some(object) if object.key_matches(key) && !object.is_expired() => Ok(object.data()),
 
 			_ => Err(CacheError::KeyNotFound),
 		}
@@ -485,7 +452,8 @@ where
 		let new_expiry = object.expiry();
 		let new_base_size = self.overhead_manager.base_size(&object);
 
-		self.status.update_base_used_size(new_base_size as i64 - old_base_size as i64);
+		self.status
+			.update_base_used_size(new_base_size as i64 - old_base_size as i64);
 		self.broadcast(WorkerEvent::Ttl(hashed_key, old_expiry, new_expiry))?;
 
 		Ok(())
@@ -515,8 +483,9 @@ where
 		let hashed_key = self.hash_key(key);
 
 		match self.objects.get(&hashed_key) {
-			Some(object) if object.key_matches(key) && !object.is_expired() =>
-				Ok(self.overhead_manager.total_size(&object)),
+			Some(object) if object.key_matches(key) && !object.is_expired() => {
+				Ok(self.overhead_manager.total_size(&object))
+			},
 
 			_ => Err(CacheError::KeyNotFound),
 		}
@@ -669,7 +638,9 @@ where
 		return Err(CacheError::KeyNotFound);
 	};
 
-	if let Some(EraseKey::Original(key, _)) = maybe_key && !entry.get().key_matches(key) {
+	if let Some(EraseKey::Original(key, _)) = maybe_key
+		&& !entry.get().key_matches(key)
+	{
 		return Err(CacheError::KeyNotFound);
 	};
 
@@ -689,7 +660,7 @@ unsafe impl<K, V, S> Send for PaperCache<K, V, S> {}
 
 #[cfg(test)]
 mod tests {
-	use crate::{PaperCache, PaperPolicy, CacheError};
+	use crate::{CacheError, PaperCache, PaperPolicy};
 
 	const TEST_CACHE_MAX_SIZE: u64 = 1000;
 
@@ -747,10 +718,7 @@ mod tests {
 
 	#[test]
 	fn it_sets_with_ttl() {
-		use std::{
-			thread,
-			time::Duration,
-		};
+		use std::{thread, time::Duration};
 
 		let cache = init_test_cache();
 		assert!(cache.set(0, 1, Some(1)).is_ok());
@@ -778,19 +746,11 @@ mod tests {
 
 	#[test]
 	fn it_does_not_allow_empty_policies() {
-		let try_cache = PaperCache::<u32, u32>::new(
-			TEST_CACHE_MAX_SIZE,
-			&[],
-			PaperPolicy::Lfu,
-		);
+		let try_cache = PaperCache::<u32, u32>::new(TEST_CACHE_MAX_SIZE, &[], PaperPolicy::Lfu);
 
 		assert!(try_cache.is_err_and(|err| err == CacheError::EmptyPolicies));
 
-		let try_cache = PaperCache::<u32, u32>::new(
-			TEST_CACHE_MAX_SIZE,
-			&[],
-			PaperPolicy::Auto,
-		);
+		let try_cache = PaperCache::<u32, u32>::new(TEST_CACHE_MAX_SIZE, &[], PaperPolicy::Auto);
 
 		assert!(try_cache.is_err_and(|err| err == CacheError::EmptyPolicies));
 	}
@@ -807,7 +767,10 @@ mod tests {
 
 		let try_cache = PaperCache::<u32, u32>::new(
 			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Auto, PaperPolicy::Lru],
+			&[
+				PaperPolicy::Auto,
+				PaperPolicy::Lru,
+			],
 			PaperPolicy::Auto,
 		);
 
@@ -818,7 +781,11 @@ mod tests {
 	fn it_does_not_allow_duplicate_policies() {
 		let try_cache = PaperCache::<u32, u32>::new(
 			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Lfu, PaperPolicy::Lru, PaperPolicy::Lfu],
+			&[
+				PaperPolicy::Lfu,
+				PaperPolicy::Lru,
+				PaperPolicy::Lfu,
+			],
 			PaperPolicy::Lfu,
 		);
 
@@ -826,7 +793,10 @@ mod tests {
 
 		let try_cache = PaperCache::<u32, u32>::new(
 			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Lfu, PaperPolicy::Lru],
+			&[
+				PaperPolicy::Lfu,
+				PaperPolicy::Lru,
+			],
 			PaperPolicy::Lfu,
 		);
 
@@ -865,10 +835,7 @@ mod tests {
 
 	#[test]
 	fn it_sets_an_existing_objects_ttl() {
-		use std::{
-			thread,
-			time::Duration,
-		};
+		use std::{thread, time::Duration};
 
 		let cache = init_test_cache();
 
@@ -889,10 +856,7 @@ mod tests {
 
 	#[test]
 	fn it_resets_an_objects_ttl() {
-		use std::{
-			thread,
-			time::Duration,
-		};
+		use std::{thread, time::Duration};
 
 		let cache = init_test_cache();
 
@@ -909,16 +873,12 @@ mod tests {
 	fn it_gets_an_objects_size() {
 		use std::mem;
 
-		use crate::object::{
-			ExpireTime,
-			overhead::get_policy_overhead,
-		};
+		use crate::object::{ExpireTime, overhead::get_policy_overhead};
 
 		let cache = init_test_cache();
 
-		let expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
-			+ get_policy_overhead(&PaperPolicy::Lfu);
+		let expected =
+			4 + 4 + mem::size_of::<ExpireTime>() as u32 + get_policy_overhead(&PaperPolicy::Lfu);
 
 		assert!(cache.set(0, 1, None).is_ok());
 		assert_eq!(cache.size(&0), Ok(expected));
@@ -935,8 +895,8 @@ mod tests {
 
 		let cache = init_test_cache();
 
-		let expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
+		let expected = 4
+			+ 4 + mem::size_of::<ExpireTime>() as u32
 			+ get_policy_overhead(&PaperPolicy::Lfu)
 			+ get_ttl_overhead();
 
@@ -948,16 +908,17 @@ mod tests {
 	fn it_gets_an_objects_size_after_policy_switch() {
 		use std::mem;
 
-		use crate::object::{
-			ExpireTime,
-			overhead::get_policy_overhead,
-		};
+		use crate::object::{ExpireTime, overhead::get_policy_overhead};
 
 		let cache = PaperCache::<u32, u32>::new(
 			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Lru, PaperPolicy::Lfu],
+			&[
+				PaperPolicy::Lru,
+				PaperPolicy::Lfu,
+			],
 			PaperPolicy::Lfu,
-		).expect("Could not initialize test cache");
+		)
+		.expect("Could not initialize test cache");
 
 		let base_expected = 4 + 4 + mem::size_of::<ExpireTime>() as u32;
 		let lfu_expected = base_expected + get_policy_overhead(&PaperPolicy::Lfu);
@@ -981,9 +942,8 @@ mod tests {
 
 		let cache = init_test_cache();
 
-		let pre_expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
-			+ get_policy_overhead(&PaperPolicy::Lfu);
+		let pre_expected =
+			4 + 4 + mem::size_of::<ExpireTime>() as u32 + get_policy_overhead(&PaperPolicy::Lfu);
 
 		let post_expected = pre_expected + get_ttl_overhead();
 
@@ -1005,8 +965,8 @@ mod tests {
 
 		let cache = init_test_cache();
 
-		let pre_expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
+		let pre_expected = 4
+			+ 4 + mem::size_of::<ExpireTime>() as u32
 			+ get_policy_overhead(&PaperPolicy::Lfu)
 			+ get_ttl_overhead();
 
@@ -1046,16 +1006,17 @@ mod tests {
 	fn status_shows_correct_used_size_after_policy_switch() {
 		use std::mem;
 
-		use crate::object::{
-			ExpireTime,
-			overhead::get_policy_overhead,
-		};
+		use crate::object::{ExpireTime, overhead::get_policy_overhead};
 
 		let cache = PaperCache::<u32, u32>::new(
 			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Lru, PaperPolicy::Lfu],
+			&[
+				PaperPolicy::Lru,
+				PaperPolicy::Lfu,
+			],
 			PaperPolicy::Lfu,
-		).expect("Could not initialize test cache");
+		)
+		.expect("Could not initialize test cache");
 
 		let base_expected = 4 + 4 + mem::size_of::<ExpireTime>() as u32;
 		let lfu_expected = base_expected + get_policy_overhead(&PaperPolicy::Lfu);
@@ -1081,9 +1042,8 @@ mod tests {
 
 		let cache = init_test_cache();
 
-		let pre_expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
-			+ get_policy_overhead(&PaperPolicy::Lfu);
+		let pre_expected =
+			4 + 4 + mem::size_of::<ExpireTime>() as u32 + get_policy_overhead(&PaperPolicy::Lfu);
 
 		let post_expected = pre_expected + get_ttl_overhead();
 
@@ -1107,8 +1067,8 @@ mod tests {
 
 		let cache = init_test_cache();
 
-		let pre_expected = 4 + 4
-			+ mem::size_of::<ExpireTime>() as u32
+		let pre_expected = 4
+			+ 4 + mem::size_of::<ExpireTime>() as u32
 			+ get_policy_overhead(&PaperPolicy::Lfu)
 			+ get_ttl_overhead();
 
@@ -1124,10 +1084,7 @@ mod tests {
 	}
 
 	fn init_test_cache() -> PaperCache<u32, u32> {
-		PaperCache::<u32, u32>::new(
-			TEST_CACHE_MAX_SIZE,
-			&[PaperPolicy::Lfu],
-			PaperPolicy::Lfu,
-		).expect("Could not initialize test cache")
+		PaperCache::<u32, u32>::new(TEST_CACHE_MAX_SIZE, &[PaperPolicy::Lfu], PaperPolicy::Lfu)
+			.expect("Could not initialize test cache")
 	}
 }

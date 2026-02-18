@@ -7,18 +7,14 @@
 
 mod fragment;
 
-use std::{
-	thread,
-	sync::Arc,
-	time::Duration,
-	collections::VecDeque,
-};
+use std::{collections::VecDeque, sync::Arc, thread, time::Duration};
 
-use parking_lot::RwLock;
 use crossbeam_channel::Receiver;
-use log::error;
 use kwik::file::FileWriter;
+use log::error;
+use parking_lot::RwLock;
 
+pub use crate::worker::policy::trace::fragment::TraceFragment;
 use crate::{
 	error::CacheError,
 	worker::{
@@ -27,21 +23,17 @@ use crate::{
 	},
 };
 
-pub use crate::worker::policy::trace::fragment::TraceFragment;
-
 const POLL_DELAY: Duration = Duration::from_secs(1);
 
 pub struct TraceWorker {
-	listener: Receiver<StackEvent>,
+	listener:        Receiver<StackEvent>,
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
 }
 
 impl Worker for TraceWorker {
 	fn run(&mut self) -> Result<(), CacheError> {
 		loop {
-			let events = self.listener
-				.try_iter()
-				.collect::<Vec<_>>();
+			let events = self.listener.try_iter().collect::<Vec<_>>();
 
 			if !events.is_empty() {
 				self.refresh_fragments()?;
@@ -112,19 +104,21 @@ impl TraceWorker {
 	/// youngest fragment is also younger than TRACE_REFRESH_AGE
 	fn refresh_fragments(&mut self) -> Result<(), CacheError> {
 		// remove any fragments that are expired
-		while self.trace_fragments
+		while self
+			.trace_fragments
 			.read()
 			.front()
-			.is_some_and(|fragment| fragment.is_expired()) {
-
+			.is_some_and(|fragment| fragment.is_expired())
+		{
 			self.trace_fragments.write().pop_front();
 		}
 
-		if self.trace_fragments
+		if self
+			.trace_fragments
 			.read()
 			.back()
-			.is_some_and(|fragment| fragment.is_valid()) {
-
+			.is_some_and(|fragment| fragment.is_valid())
+		{
 			// the latest trace is still valid
 			return Ok(());
 		}
@@ -139,9 +133,7 @@ impl TraceWorker {
 			},
 		};
 
-		self.trace_fragments
-			.write()
-			.push_back(fragment);
+		self.trace_fragments.write().push_back(fragment);
 
 		Ok(())
 	}

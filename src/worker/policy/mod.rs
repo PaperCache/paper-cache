@@ -5,47 +5,47 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-mod policy_stack;
-mod mini_stack;
 mod event;
+mod mini_stack;
+mod policy_stack;
 mod trace;
 
 use std::{
-	thread,
-	sync::Arc,
-	time::{Instant, Duration},
-	io::{Seek, SeekFrom},
 	collections::VecDeque,
+	io::{Seek, SeekFrom},
+	sync::Arc,
+	thread,
+	time::{Duration, Instant},
 };
 
-use typesize::TypeSize;
-use parking_lot::RwLock;
-use crossbeam_channel::{Sender, Receiver, unbounded};
-use log::{info, warn, error};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use kwik::fmt;
+use log::{error, info, warn};
+use parking_lot::RwLock;
+use typesize::TypeSize;
 
 use crate::{
 	CacheSize,
+	EraseKey,
 	HashedKey,
 	ObjectMapRef,
-	StatusRef,
 	OverheadManagerRef,
-	EraseKey,
+	StatusRef,
 	erase,
 	error::CacheError,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::{
 		Worker,
 		WorkerEvent,
 		WorkerReceiver,
-		register_worker,
 		policy::{
-			mini_stack::MiniStackManager,
 			event::{StackEvent, TraceEvent},
-			trace::{TraceWorker, TraceFragment},
+			mini_stack::MiniStackManager,
 			policy_stack::{PolicyStack, init_policy_stack},
+			trace::{TraceFragment, TraceWorker},
 		},
+		register_worker,
 	},
 };
 
@@ -60,21 +60,21 @@ const LONG_POLLING_DURATION: Duration = Duration::from_secs(1);
 pub struct PolicyWorker<K, V> {
 	listener: Receiver<WorkerEvent>,
 
-	objects: ObjectMapRef<K, V>,
-	status: StatusRef,
+	objects:          ObjectMapRef<K, V>,
+	status:           StatusRef,
 	overhead_manager: OverheadManagerRef,
 
 	policy_stack: Option<Box<dyn PolicyStack>>,
 
 	trace_fragments: Arc<RwLock<VecDeque<TraceFragment>>>,
-	trace_worker: Sender<StackEvent>,
+	trace_worker:    Sender<StackEvent>,
 
 	mini_stack_manager: MiniStackManager,
-	mini_index: Option<usize>,
-	current_policy: Arc<RwLock<PaperPolicy>>,
+	mini_index:         Option<usize>,
+	current_policy:     Arc<RwLock<PaperPolicy>>,
 
 	last_auto_policy_time: Option<Instant>,
-	last_set_time: Option<Instant>,
+	last_set_time:         Option<Instant>,
 }
 
 impl<K, V> Worker for PolicyWorker<K, V>
@@ -84,16 +84,14 @@ where
 	V: TypeSize,
 {
 	fn run(&mut self) -> Result<(), CacheError> {
-		let (
-			policy_reconstruct_tx,
-			policy_reconstruct_rx,
-		) = unbounded::<Box<dyn PolicyStack>>();
+		let (policy_reconstruct_tx, policy_reconstruct_rx) = unbounded::<Box<dyn PolicyStack>>();
 
 		let policy_reconstruct_tx = Arc::new(policy_reconstruct_tx);
 		let mut buffered_events = Vec::<StackEvent>::new();
 
 		loop {
-			let events = self.listener
+			let events = self
+				.listener
 				.try_iter()
 				.collect::<Vec<WorkerEvent>>();
 
@@ -160,10 +158,7 @@ where
 	) -> Result<Self, CacheError> {
 		let max_cache_size = status.max_size();
 
-		let mini_stacks = MiniStackManager::new(
-			status.policies(),
-			max_cache_size,
-		);
+		let mini_stacks = MiniStackManager::new(status.policies(), max_cache_size);
 
 		let policy = status.policy();
 		let policy_stack = init_policy_stack(policy, max_cache_size);
@@ -171,10 +166,7 @@ where
 		let trace_fragments = Arc::new(RwLock::new(VecDeque::new()));
 		let (trace_worker, trace_listener) = unbounded();
 
-		register_worker(TraceWorker::new(
-			trace_listener,
-			trace_fragments.clone(),
-		));
+		register_worker(TraceWorker::new(trace_listener, trace_fragments.clone()));
 
 		// we need the initial size so we can accurately reconstruct the
 		// policy stacks after the cache is resized
@@ -346,10 +338,7 @@ where
 		Ok(())
 	}
 
-	fn apply_evictions(
-		&mut self,
-		buffered_events: &mut Vec<StackEvent>,
-	) -> Result<(), CacheError> {
+	fn apply_evictions(&mut self, buffered_events: &mut Vec<StackEvent>) -> Result<(), CacheError> {
 		if let Some(index) = self.mini_index {
 			self.apply_mini_evictions(index, buffered_events);
 			return Ok(());
@@ -385,17 +374,14 @@ where
 		Ok(())
 	}
 
-	fn apply_mini_evictions(
-		&mut self,
-		mini_index: usize,
-		buffered_events: &mut Vec<StackEvent>,
-	) {
+	fn apply_mini_evictions(&mut self, mini_index: usize, buffered_events: &mut Vec<StackEvent>) {
 		let max_cache_size = self.status.max_size();
 		let policy = self.current_policy.read();
 		let mut evictions = Vec::<HashedKey>::new();
 
 		while self.status.used_size(&policy) > max_cache_size {
-			let maybe_key = self.mini_stack_manager
+			let maybe_key = self
+				.mini_stack_manager
 				.get_eviction(mini_index)
 				.map(|key| EraseKey::Hashed(key));
 
@@ -414,7 +400,8 @@ where
 			buffered_events.push(StackEvent::Del(key));
 		}
 
-		self.mini_stack_manager.apply_evictions(mini_index, evictions);
+		self.mini_stack_manager
+			.apply_evictions(mini_index, evictions);
 	}
 
 	fn perform_auto_policy(&mut self, now: Instant, has_current_set: bool) -> Option<PaperPolicy> {
@@ -426,7 +413,8 @@ where
 			return None;
 		}
 
-		let should_poll_policy = self.last_auto_policy_time
+		let should_poll_policy = self
+			.last_auto_policy_time
 			.is_none_or(|last_auto_policy_time| now - last_auto_policy_time > AUTO_POLICY_DURATION);
 
 		if !should_poll_policy {
@@ -434,11 +422,13 @@ where
 		}
 
 		self.last_auto_policy_time = Some(now);
-		self.mini_stack_manager.get_optimal_policy(&self.current_policy.read())
+		self.mini_stack_manager
+			.get_optimal_policy(&self.current_policy.read())
 	}
 
 	fn delay_event_loop(&mut self, now: Instant, has_current_set: bool) {
-		let has_recent_set = self.last_set_time
+		let has_recent_set = self
+			.last_set_time
 			.is_some_and(|last_set_time| now - last_set_time <= SET_RECENCY_DURATION);
 
 		if has_current_set {
@@ -519,4 +509,5 @@ unsafe impl<K, V> Send for PolicyWorker<K, V>
 where
 	K: TypeSize,
 	V: TypeSize,
-{}
+{
+}

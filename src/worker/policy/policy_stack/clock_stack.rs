@@ -15,8 +15,8 @@ use kwik::collections::HashList;
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
@@ -26,7 +26,7 @@ pub struct ClockStack {
 }
 
 struct Object {
-	key: HashedKey,
+	key:     HashedKey,
 	visited: bool,
 }
 
@@ -115,7 +115,7 @@ impl Eq for Object {}
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, ClockStack};
+		use crate::worker::policy::policy_stack::{ClockStack, PolicyStack};
 
 		let mut stack = ClockStack::default();
 

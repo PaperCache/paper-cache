@@ -6,20 +6,21 @@
  */
 
 use std::collections::HashMap;
-use dlv_list::{VecList, Index};
+
+use dlv_list::{Index, VecList};
 use kwik::collections::HashList;
 
 use crate::{
 	HashedKey,
 	NoHasher,
-	policy::PaperPolicy,
 	object::ObjectSize,
+	policy::PaperPolicy,
 	worker::policy::policy_stack::PolicyStack,
 };
 
 #[derive(Default)]
 pub struct LfuStack {
-	index_map: HashMap<HashedKey, Index<CountStack>, NoHasher>,
+	index_map:    HashMap<HashedKey, Index<CountStack>, NoHasher>,
 	count_stacks: VecList<CountStack>,
 }
 
@@ -46,12 +47,19 @@ impl PolicyStack for LfuStack {
 			return self.update(key);
 		}
 
-		if self.count_stacks.front().is_none_or(|count_stack| count_stack.count != 1) {
+		if self
+			.count_stacks
+			.front()
+			.is_none_or(|count_stack| count_stack.count != 1)
+		{
 			self.count_stacks.push_front(CountStack::new(1));
 		}
 
 		let count_stack_index = self.count_stacks.front_index().unwrap();
-		let count_stack = self.count_stacks.get_mut(count_stack_index).unwrap();
+		let count_stack = self
+			.count_stacks
+			.get_mut(count_stack_index)
+			.unwrap();
 
 		count_stack.push(key);
 
@@ -64,14 +72,23 @@ impl PolicyStack for LfuStack {
 		};
 
 		let prev_count_stack_index = *count_stack_index;
-		let prev_count_stack = self.count_stacks.get_mut(prev_count_stack_index).unwrap();
+		let prev_count_stack = self
+			.count_stacks
+			.get_mut(prev_count_stack_index)
+			.unwrap();
 		let prev_count = prev_count_stack.count;
 
 		prev_count_stack.remove(key);
 		let prev_is_empty = prev_count_stack.is_empty();
 
-		if let Some(next_count_stack_index) = self.count_stacks.get_next_index(prev_count_stack_index) {
-			let next_count_stack = self.count_stacks.get_mut(next_count_stack_index).unwrap();
+		if let Some(next_count_stack_index) = self
+			.count_stacks
+			.get_next_index(prev_count_stack_index)
+		{
+			let next_count_stack = self
+				.count_stacks
+				.get_mut(next_count_stack_index)
+				.unwrap();
 
 			if next_count_stack.count == prev_count + 1 {
 				next_count_stack.push(key);
@@ -88,7 +105,9 @@ impl PolicyStack for LfuStack {
 		let mut count_stack = CountStack::new(prev_count + 1);
 		count_stack.push(key);
 
-		let count_stack_index = self.count_stacks.insert_after(prev_count_stack_index, count_stack);
+		let count_stack_index = self
+			.count_stacks
+			.insert_after(prev_count_stack_index, count_stack);
 		self.index_map.insert(key, count_stack_index);
 
 		if prev_is_empty {
@@ -101,7 +120,10 @@ impl PolicyStack for LfuStack {
 			return;
 		};
 
-		let count_stack = self.count_stacks.get_mut(count_stack_index).unwrap();
+		let count_stack = self
+			.count_stacks
+			.get_mut(count_stack_index)
+			.unwrap();
 		count_stack.remove(key);
 
 		if count_stack.is_empty() {
@@ -158,11 +180,13 @@ impl CountStack {
 mod tests {
 	#[test]
 	fn eviction_order_is_correct() {
-		use crate::worker::policy::policy_stack::{PolicyStack, LfuStack};
+		use crate::worker::policy::policy_stack::{LfuStack, PolicyStack};
 
 		let mut stack = LfuStack::default();
 
-		for access in [0, 1, 1, 1, 0, 2, 3, 0, 2, 0] {
+		for access in [
+			0, 1, 1, 1, 0, 2, 3, 0, 2, 0,
+		] {
 			stack.insert(access, 1);
 		}
 
